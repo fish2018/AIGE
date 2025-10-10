@@ -24,7 +24,7 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8182',
         changeOrigin: true,
         ws: true, // 支持WebSocket代理
       },

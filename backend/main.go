@@ -35,6 +35,6 @@ func main() {
 	// 注册路由
 	routes.SetupRoutes(r)
 
-	log.Println("服务器启动在端口 :8080")
-	r.Run(":8080")
+	log.Println("服务器启动在端口 :8182")
+	r.Run(":8182")
 }
