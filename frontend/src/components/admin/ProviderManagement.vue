@@ -406,7 +406,7 @@ const modelForm = ref({
 })
 
 interface ProviderType {
-  value: string
+  value: 'openai' | 'anthropic' | 'google' | 'custom'
   label: string
   description: string
 }
