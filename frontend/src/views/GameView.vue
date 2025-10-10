@@ -171,7 +171,7 @@ const filteredCurrentLife = computed(() => {
   }
   
   const filtered: Record<string, any> = {}
-  console.log('[filteredCurrentLife] 处理新数据结构，current_life:', currentLife)
+  //console.log('[filteredCurrentLife] 处理新数据结构，current_life:', currentLife)
   
   // 遍历current_life的所有顶层字段（属性、位置、故事事件、目标体系等）
   for (const [key, value] of Object.entries(currentLife)) {
@@ -189,7 +189,7 @@ const filteredCurrentLife = computed(() => {
     }
   }
   
-  console.log('[filteredCurrentLife] 过滤后的数据:', filtered)
+  //console.log('[filteredCurrentLife] 过滤后的数据:', filtered)
   return Object.keys(filtered).length > 0 ? filtered : null
 })
 const userInput = ref('')
@@ -255,9 +255,9 @@ async function initializeGame() {
     if (response.ok) {
       loadingText.value = '正在加载游戏数据...'
       const data = await response.json()
-      console.log('[GameView] 初始化响应:', data)
+      //console.log('[GameView] 初始化响应:', data)
       gameState.value = data.state || data
-      console.log('[GameView] gameState设置为:', gameState.value)
+      //console.log('[GameView] gameState设置为:', gameState.value)
       loadingText.value = '正在建立实时连接...'
       connectWebSocket()
     } else {
@@ -279,19 +279,19 @@ function connectWebSocket() {
   // WebSocket不支持自定义header，需要在URL中传递token
   const wsUrl = `${protocol}//${window.location.host}/api/game/ws?mod_id=${currentGame.value}&token=${authStore.token}`
   
-  console.log('[GameView] 正在连接WebSocket:', wsUrl.replace(authStore.token || '', 'TOKEN'))
+  //console.log('[GameView] 正在连接WebSocket:', wsUrl.replace(authStore.token || '', 'TOKEN'))
   
   ws = new WebSocket(wsUrl)
   
   ws.onopen = () => {
-    console.log('[GameView] ✅ WebSocket已连接')
+    //console.log('[GameView] ✅ WebSocket已连接')
     wsReady.value = true
     isLoading.value = false // 连接成功后隐藏加载动画
     ElMessage.success('连接成功')
   }
   
   ws.onmessage = (event) => {
-    console.log('[GameView] 收到WebSocket消息:', event.data)
+    //console.log('[GameView] 收到WebSocket消息:', event.data)
     try {
       const message = JSON.parse(event.data)
       handleWebSocketMessage(message)
@@ -307,12 +307,12 @@ function connectWebSocket() {
   }
   
   ws.onclose = (event) => {
-    console.log('[GameView] WebSocket已断开, code:', event.code, 'reason:', event.reason)
+    //console.log('[GameView] WebSocket已断开, code:', event.code, 'reason:', event.reason)
     wsReady.value = false
     // 自动重连 - 仅在需要重连且有当前游戏时
     if (shouldReconnect.value && currentGame.value && authStore.token) {
       setTimeout(() => {
-        console.log('[GameView] 尝试重新连接WebSocket...')
+        //console.log('[GameView] 尝试重新连接WebSocket...')
         connectWebSocket()
       }, 3000)
     }
@@ -523,7 +523,7 @@ function showRollEvent(event: any) {
 
 // 开始试炼
 async function startTrial() {
-  console.log('[GameView] startTrial 被调用，发送start_trial消息')
+  //console.log('[GameView] startTrial 被调用，发送start_trial消息')
   
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     // 理论上不应该到这里，因为按钮已经disabled
@@ -623,7 +623,7 @@ async function restartOpportunities() {
     isLoading.value = true
     loadingText.value = '正在重启机缘...'
     
-    console.log('[GameView] 重启机缘 - token:', authStore.token ? 'exists' : 'missing')
+    //console.log('[GameView] 重启机缘 - token:', authStore.token ? 'exists' : 'missing')
     
     const response = await fetch('/api/game/restart-opportunities', {
       method: 'POST',
@@ -635,7 +635,7 @@ async function restartOpportunities() {
 
     if (response.ok) {
       const data = await response.json()
-      console.log('[GameView] 重启机缘成功:', data)
+      //console.log('[GameView] 重启机缘成功:', data)
       
       // 停止WebSocket连接
       shouldReconnect.value = false
@@ -1048,7 +1048,7 @@ function formatObjectInline(obj: any): string {
 function getStartButtonText(): string {
   if (!wsReady.value) return '连接中...'
   const opps = sessionState.value?.opportunities_remaining ?? 10
-  console.log('[GameView] getStartButtonText - opportunities_remaining:', opps)
+  //console.log('[GameView] getStartButtonText - opportunities_remaining:', opps)
   if (opps <= 0) return '机缘已尽'
   if (opps === 10) return '开始第一次试炼'
   return '开启下一次试炼'

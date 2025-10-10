@@ -194,11 +194,11 @@ const sendMessage = async () => {
   userInput.value = ''
   scrollToBottom()
 
-  console.log('[Playground] 开始发送消息')
+  //console.log('[Playground] 开始发送消息')
 
   try {
     if (streamEnabled.value) {
-      console.log('[Playground] 使用流式模式')
+      //console.log('[Playground] 使用流式模式')
       isTyping.value = true
       scrollToBottom()
 
@@ -213,23 +213,23 @@ const sendMessage = async () => {
           stream: true
         },
         (content) => {
-          console.log('[Playground] onChunk 被调用, content:', JSON.stringify(content), 'aiMessageIndex:', aiMessageIndex)
+          //console.log('[Playground] onChunk 被调用, content:', JSON.stringify(content), 'aiMessageIndex:', aiMessageIndex)
           
           if (aiMessageIndex === -1) {
-            console.log('[Playground] 创建新的AI消息')
+            //console.log('[Playground] 创建新的AI消息')
             isTyping.value = false
             messages.value.push({
               role: 'assistant',
               content: ''
             })
             aiMessageIndex = messages.value.length - 1
-            console.log('[Playground] AI消息索引:', aiMessageIndex)
+            //console.log('[Playground] AI消息索引:', aiMessageIndex)
           }
           
           streamingContent += content
-          console.log('[Playground] 累积内容长度:', streamingContent.length, '当前内容:', JSON.stringify(streamingContent.substring(0, 50)))
+          //console.log('[Playground] 累积内容长度:', streamingContent.length, '当前内容:', JSON.stringify(streamingContent.substring(0, 50)))
           messages.value[aiMessageIndex].content = streamingContent
-          console.log('[Playground] 更新消息后, messages长度:', messages.value.length, '消息内容长度:', messages.value[aiMessageIndex].content.length)
+          //console.log('[Playground] 更新消息后, messages长度:', messages.value.length, '消息内容长度:', messages.value[aiMessageIndex].content.length)
           scrollToBottom()
         },
         (error) => {
@@ -239,7 +239,7 @@ const sendMessage = async () => {
           ElMessage.error('对话失败: ' + error.message)
         },
         () => {
-          console.log('[Playground] onComplete 被调用, 最终内容长度:', streamingContent.length)
+          //console.log('[Playground] onComplete 被调用, 最终内容长度:', streamingContent.length)
           isTyping.value = false
           isLoading.value = false
           scrollToBottom()
