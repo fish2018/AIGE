@@ -1,0 +1,68 @@
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+import type { User, LoginRequest, RegisterRequest, AuthResponse } from '@/types'
+import api from '@/utils/api'
+
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref<User | null>(null)
+  const token = ref<string | null>(localStorage.getItem('token'))
+
+  const login = async (loginData: LoginRequest): Promise<AuthResponse> => {
+    const data = await api.post<AuthResponse>('/auth/login', loginData)
+    
+    user.value = data.user
+    token.value = data.token
+    localStorage.setItem('token', data.token)
+    
+    return data
+  }
+
+  const register = async (registerData: RegisterRequest): Promise<AuthResponse> => {
+    const data = await api.post<AuthResponse>('/auth/register', registerData)
+    
+    user.value = data.user
+    token.value = data.token
+    localStorage.setItem('token', data.token)
+    
+    return data
+  }
+
+  const logout = () => {
+    user.value = null
+    token.value = null
+    localStorage.removeItem('token')
+    // 使用动态导入避免循环依赖
+    import('@/router').then(({ default: router }) => {
+      router.push('/login')
+    })
+  }
+
+  const getProfile = async (): Promise<User> => {
+    if (!token.value) {
+      throw new Error('No token')
+    }
+    
+    const userData = await api.get<User>('/profile')
+    user.value = userData
+    return userData
+  }
+
+  const isAuthenticated = () => {
+    return !!token.value
+  }
+
+  const isAdmin = () => {
+    return user.value?.is_admin || false
+  }
+
+  return {
+    user,
+    token,
+    login,
+    register,
+    logout,
+    getProfile,
+    isAuthenticated,
+    isAdmin,
+  }
+})

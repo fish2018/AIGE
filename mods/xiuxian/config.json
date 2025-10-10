@@ -1,0 +1,38 @@
+{
+  "game_id": "xiuxian",
+  "name": "驭梦乾坤",
+  "version": "1.0.0",
+  "description": "凡人逆天修仙，从炼气期起步，历经筑基、金丹、元婴，最终破碎虚空。宗门争锋、炼丹炼器、御兽双修、洞府探宝，体验完整的修仙世界！",
+  "author": "AIGE Team",
+  "game_config": {
+    "initial_opportunities": 10,
+    "reward_scaling_factor": 500000,
+    "max_token_history": 150000,
+    "auto_save_interval": 300,
+    "roll_settings": {
+      "critical_success_threshold": 0.05,
+      "critical_failure_threshold": 0.96,
+      "default_sides": 100
+    },
+    "cheat_check": {
+      "enabled": true,
+      "check_interval": 3,
+      "model": "gpt-4o-mini"
+    }
+  },
+  "prompts": {
+    "game_master": "prompts/game_master.txt",
+    "start_game": "prompts/start_game.txt",
+    "cheat_check": "prompts/cheat_check.txt"
+  },
+  "initial_state": {
+    "opportunities_remaining": 10,
+    "daily_success_achieved": false,
+    "is_in_trial": false,
+    "is_processing": false,
+    "current_life": null,
+    "display_history": [],
+    "roll_event": null
+  },
+  "welcome_message": "【**驭梦乾坤**】\\n\\n> *\"凡人修仙，逆天而行。天道有缺，人遁其一。\"*\\n\\n汝将踏入修仙者的世界，从寒门散修起步，历经**炼气十三层**、**筑基期**、**结丹期**、**元婴期**等境界，最终破碎虚空，飞升离界。\\n\\n**修仙大道，八荒争锋：**\\n\\n🏔️ **宗门拜师**：\\n- **黄枫谷**：炼丹圣地，药园加持，低调修行\\n- **太一门**：天机推演，神识锻造，五行引道\\n- **星宫**：统治者权柄，道心侍妾，星斗大阵\\n- **万灵宗**：御兽天堂，灵兽养成，噬金虫进化\\n- **黑煞教**：魔道枭雄，夺舍煞气，魔染红尘\\n- **合欢宗**：双修速成，缔结同参，采补之道\\n- **元婴宗**：元神出窍，青元剑诀，问道寻真\\n- **落云宗**：灵眼之树，逆天改命，协同守山\\n\\n⚗️ **炼丹炼器**：学习丹方图纸，炼制筑基丹、结金三宝、元婴三宝等珍稀丹药\\n\\n⚔️ **战斗系统**：斗法切磋，夺宝争锋，洞府防护，战力评估\\n\\n🌿 **探险寻宝**：琉璃塔闯塔，虚天殿副本，秘境洞府，上古传承\\n\\n🦅 **灵兽伙伴**：契约培养，出战休息，进化升级，偷菜助战\\n\\n💕 **道侣双修**：情缘发展，双修加持，红袖添香，灵犀双运\\n\\n🏠 **洞府建设**：炼制法宝，温养法器，阵法布置，访客接待\\n\\n🌱 **药园经营**：播种采药，除草除虫，扩建升级，材料自给\\n\\n---\\n\\n**天道试炼机制：**\\n\\n每日汝有**十次机缘**试炼。每次开启新的修仙轮回将消耗一次机缘。\\n\\n在轮回中积累**灵石**、**修为**、**法宝**、**人脉**等资源。\\n\\n**三种结局：**\\n\\n- 🩸 **道消身殒**：死亡或绝境，此生积累归零\\n- ⌛ **机缘耗尽**：十次机缘用完，今日试炼失败\\n- ✨ **飞升离界**：**唯一成功之路**！带走灵石，转化为功德圆满！\\n\\n---\\n\\n天机道尊将为汝安排独特的出身、灵根与初始际遇！\\n\\n*修仙路漫漫，惟愿道友道心坚定，终得逍遥长生！*"
+}
