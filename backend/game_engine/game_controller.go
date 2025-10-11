@@ -1114,6 +1114,7 @@ func (gc *GameController) callAIStreamSecondStage(session *GameSession, prompt s
 						}
 					} else {
 						// 纯narrative内容，直接发送
+						content = strings.ReplaceAll(content, "$", "")
 						if err := secondStageCallback(content); err != nil {
 							return err
 						}
