@@ -720,58 +720,57 @@ function renderMarkdown(text: string): string {
     let processedText = text.replace(/\\n/g, '\n')
     
     // 检测并保护ASCII艺术块
-    processedText = protectAsciiArt(processedText)
-    
+    // processedText = protectAsciiArt(processedText)
     return marked.parse(processedText, { breaks: true, gfm: true }) as string
   } catch (error) {
     return text.replace(/\\n/g, '<br>').replace(/\n/g, '<br>')
   }
 }
 
-// 保护ASCII艺术格式
-function protectAsciiArt(text: string): string {
-  // 检测包含ASCII艺术的行模式
-  const lines = text.split('\n')
-  const result: string[] = []
-  let inAsciiBlock = false
-  let asciiBlock: string[] = []
+// // 保护ASCII艺术格式
+// function protectAsciiArt(text: string): string {
+//   // 检测包含ASCII艺术的行模式
+//   const lines = text.split('\n')
+//   const result: string[] = []
+//   let inAsciiBlock = false
+//   let asciiBlock: string[] = []
   
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
+//   for (let i = 0; i < lines.length; i++) {
+//     const line = lines[i]
     
-    // 检测ASCII艺术特征：包含多个连续空格和特殊字符的行
-    const isAsciiLine = /[\s]{4,}.*[│┼↑↓←→─]|[\s]{4,}.*[├┤┬┴]|^\s*[│┼↑↓←→─├┤┬┴]/.test(line) ||
-                       /^\s*[│┼↑↓←→─├┤┬┴].*[\s]{2,}/.test(line) ||
-                       /^\s{8,}.*[↑↓←→]/.test(line) ||
-                       line.includes('───') || line.includes('│') || line.includes('┼')
+//     // 检测ASCII艺术特征：包含多个连续空格和特殊字符的行
+//     const isAsciiLine = /[\s]{4,}.*[│┼↑↓←→─]|[\s]{4,}.*[├┤┬┴]|^\s*[│┼↑↓←→─├┤┬┴]/.test(line) ||
+//                        /^\s*[│┼↑↓←→─├┤┬┴].*[\s]{2,}/.test(line) ||
+//                        /^\s{8,}.*[↑↓←→]/.test(line) ||
+//                        line.includes('───') || line.includes('│') || line.includes('┼')
     
-    if (isAsciiLine && !inAsciiBlock) {
-      // 开始ASCII块
-      inAsciiBlock = true
-      asciiBlock = [line]
-    } else if (isAsciiLine && inAsciiBlock) {
-      // 继续ASCII块
-      asciiBlock.push(line)
-    } else if (!isAsciiLine && inAsciiBlock) {
-      // 结束ASCII块
-      inAsciiBlock = false
-      // 将ASCII块包装在pre标签中
-      result.push('\n```\n' + asciiBlock.join('\n') + '\n```\n')
-      asciiBlock = []
-      result.push(line)
-    } else {
-      // 普通文本行
-      result.push(line)
-    }
-  }
+//     if (isAsciiLine && !inAsciiBlock) {
+//       // 开始ASCII块
+//       inAsciiBlock = true
+//       asciiBlock = [line]
+//     } else if (isAsciiLine && inAsciiBlock) {
+//       // 继续ASCII块
+//       asciiBlock.push(line)
+//     } else if (!isAsciiLine && inAsciiBlock) {
+//       // 结束ASCII块
+//       inAsciiBlock = false
+//       // 将ASCII块包装在pre标签中
+//       result.push('\n```\n' + asciiBlock.join('\n') + '\n```\n')
+//       asciiBlock = []
+//       result.push(line)
+//     } else {
+//       // 普通文本行
+//       result.push(line)
+//     }
+//   }
   
-  // 处理结尾的ASCII块
-  if (inAsciiBlock && asciiBlock.length > 0) {
-    result.push('\n```\n' + asciiBlock.join('\n') + '\n```\n')
-  }
+//   // 处理结尾的ASCII块
+//   if (inAsciiBlock && asciiBlock.length > 0) {
+//     result.push('\n```\n' + asciiBlock.join('\n') + '\n```\n')
+//   }
   
-  return result.join('\n')
-}
+//   return result.join('\n')
+// }
 
 // 获取消息块样式类
 function getBlockClass(text: string): string {

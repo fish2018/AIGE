@@ -38,7 +38,7 @@ func NewGameController(modLoader *ModLoader, stateManager *StateManager) *GameCo
 		defaultProvider: AIProvider{
 			APIType: "openai",
 			BaseURL: "https://api.openai.com",
-			APIKey:  "",  // 需要配置
+			APIKey:  "", // 需要配置
 			ModelID: "gpt-4o-mini",
 		},
 	}
@@ -67,7 +67,7 @@ func (gc *GameController) InitializeGame(playerID, modID string) (*GameSession, 
 
 	// No existing session, create a new one
 	fmt.Printf("[GameController] 创建新存档: 玩家=%s, mod=%s\n", playerID, modID)
-	
+
 	// Create initial state from mod config
 	initialState := make(map[string]interface{})
 	for k, v := range mod.Config.InitialState {
@@ -235,11 +235,11 @@ func (gc *GameController) callAI(session *GameSession, prompt string, mod *GameM
 	if gc.defaultProvider.APIKey == "" {
 		return "", fmt.Errorf("AI provider not configured - please set API key in admin panel")
 	}
-	
+
 	// Call AI service based on provider type
 	var response interface{}
 	var err error
-	
+
 	switch gc.defaultProvider.APIType {
 	case "openai":
 		response, err = gc.aiClient.CallOpenAI(
@@ -268,18 +268,18 @@ func (gc *GameController) callAI(session *GameSession, prompt string, mod *GameM
 	default:
 		return "", fmt.Errorf("unsupported API type: %s", gc.defaultProvider.APIType)
 	}
-	
+
 	if err != nil {
 		return "", fmt.Errorf("AI call failed: %w", err)
 	}
-	
+
 	// Extract content from response
 	if respMap, ok := response.(map[string]interface{}); ok {
 		if content, ok := respMap["content"].(string); ok {
 			return content, nil
 		}
 	}
-	
+
 	return "", fmt.Errorf("invalid AI response format")
 }
 
@@ -287,7 +287,9 @@ func (gc *GameController) callAI(session *GameSession, prompt string, mod *GameM
 func (gc *GameController) parseAndApplyAIResponse(session *GameSession, aiResponse string, mod *GameMod, originalAction string) error {
 	// Extract narrative from new format ($...$)
 	narrativeFromFormat := extractNarrative(aiResponse)
-	
+	narrative := narrativeFromFormat
+	// narrative = strings.ReplaceAll(narrative, "$", "")
+
 	// Extract JSON from response (@...@)
 	jsonStr := extractJSON(aiResponse)
 	if jsonStr == "" {
@@ -306,9 +308,10 @@ func (gc *GameController) parseAndApplyAIResponse(session *GameSession, aiRespon
 	})
 
 	// Get narrative - prefer format over JSON
-	narrative := narrativeFromFormat
 	if narrative == "" {
 		narrative, _ = parsed["narrative"].(string)
+		// Clean any $ symbols that shouldn't be in the final narrative
+		narrative = strings.ReplaceAll(narrative, "$", "")
 	}
 
 	// Check if this is a roll request (two-stage judgment)
@@ -356,6 +359,7 @@ func (gc *GameController) parseAndApplyAIResponse(session *GameSession, aiRespon
 		if narrative2 == "" {
 			narrative2, _ = parsed2["narrative"].(string)
 		}
+		// narrative2 = strings.ReplaceAll(narrative2, "$", "")
 		if narrative2 != "" {
 			session.DisplayHistory = append(session.DisplayHistory, narrative2)
 		}
@@ -391,7 +395,7 @@ func (gc *GameController) executeRoll(rollRequest map[string]interface{}, mod *G
 	rollType, _ := rollRequest["type"].(string)
 	target, _ := rollRequest["target"].(float64)
 	sides, _ := rollRequest["sides"].(float64)
-	
+
 	if sides == 0 {
 		sides = float64(mod.Config.GameConfig.RollSettings.DefaultSides)
 	}
@@ -474,14 +478,14 @@ func extractNarrative(response string) string {
 		response = response[endIdx+8:]
 	}
 
-	// Handle new format: $...$ for narrative
+	// Handle format: $...$ for narrative
 	if strings.Contains(response, "$") {
 		startIdx := strings.Index(response, "$")
 		if startIdx >= 0 {
 			endIdx := strings.Index(response[startIdx+1:], "$")
 			if endIdx >= 0 {
 				narrativeContent := response[startIdx+1 : startIdx+1+endIdx]
-				return strings.TrimSpace(narrativeContent)
+				return narrativeContent
 			}
 		}
 	}
@@ -490,7 +494,7 @@ func extractNarrative(response string) string {
 	return ""
 }
 
-// extractJSON extracts JSON from AI response (handles new format with $ and @ delimiters)
+// extractJSON extracts JSON from AI response (handles format with $ and @ delimiters)
 func extractJSON(response string) string {
 	// Remove think tags first
 	if strings.Contains(response, "<think>") && strings.Contains(response, "</think>") {
@@ -498,7 +502,7 @@ func extractJSON(response string) string {
 		response = response[endIdx+8:]
 	}
 
-	// Handle new format: @...@ for JSON
+	// Handle format: @...@ for JSON
 	if strings.Contains(response, "@") {
 		startIdx := strings.Index(response, "@")
 		if startIdx >= 0 {
@@ -539,7 +543,7 @@ func extractJSON(response string) string {
 
 	// Find JSON without delimiters (fallback)
 	response = strings.TrimSpace(response)
-	
+
 	// Try to extract JSON block
 	if startIdx := strings.Index(response, "{"); startIdx >= 0 {
 		if endIdx := strings.LastIndex(response, "}"); endIdx >= 0 {
@@ -593,7 +597,7 @@ func (gc *GameController) ProcessActionStream(playerID, modID, action string, st
 	})
 
 	var prompt string
-	
+
 	// Handle special actions
 	if action == "start_trial" {
 		// Use start trial prompt
@@ -611,28 +615,28 @@ func (gc *GameController) ProcessActionStream(playerID, modID, action string, st
 	// Call AI with streaming (with retry mechanism)
 	maxRetries := 3
 	var lastErr error
-	
+
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		fmt.Printf("[一阶段重试] 尝试第 %d/%d 次调用AI\n", attempt, maxRetries)
-		
+
 		err = gc.callAIStream(session, prompt, mod, action, streamCallback, rollCallback, secondStageCallback)
 		if err == nil {
 			fmt.Printf("[一阶段重试] 第 %d 次调用成功\n", attempt)
 			break
 		}
-		
+
 		lastErr = err
 		fmt.Printf("[一阶段重试] 第 %d 次调用失败: %v\n", attempt, err)
-		
+
 		// 检查是否是JSON格式错误
-		if strings.Contains(err.Error(), "no valid JSON found") || 
-		   strings.Contains(err.Error(), "failed to parse") {
+		if strings.Contains(err.Error(), "no valid JSON found") ||
+			strings.Contains(err.Error(), "failed to parse") {
 			fmt.Printf("[一阶段重试] 检测到JSON格式错误，准备重试...\n")
-			
+
 			if attempt < maxRetries {
 				// 在重试前稍等一下，避免请求过于频繁
 				// time.Sleep(time.Millisecond * 500)
-				
+
 				// 修改prompt，要求AI更加注意格式
 				if action == "start_new_trial" {
 					// 新游戏开始，使用特殊提示
@@ -650,14 +654,14 @@ func (gc *GameController) ProcessActionStream(playerID, modID, action string, st
 			break
 		}
 	}
-	
+
 	if err != nil {
 		fmt.Printf("[一阶段重试] 所有重试均失败，最后错误: %v\n", lastErr)
 		session.State["is_processing"] = false
 		gc.stateManager.SaveSession(session)
 		return fmt.Errorf("first stage AI call failed after %d attempts: %w", maxRetries, lastErr)
 	}
-	
+
 	session.State["is_processing"] = false
 	gc.stateManager.SaveSession(session)
 
@@ -668,7 +672,7 @@ func (gc *GameController) ProcessActionStream(playerID, modID, action string, st
 func (gc *GameController) callAIStream(session *GameSession, prompt string, mod *GameMod, originalAction string, streamCallback StreamCallback, rollCallback RollEventCallback, secondStageCallback StreamCallback) error {
 	// Build messages from session history (which already contains system prompt)
 	messages := []services.Message{}
-	
+
 	// Add conversation history (already includes system prompt from CreateSession)
 	for _, msg := range session.History {
 		messages = append(messages, services.Message{
@@ -682,7 +686,7 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 		Role:    "user",
 		Content: prompt,
 	})
-	
+
 	// 调试：打印发送给AI的消息
 	fmt.Printf("\n=== 发送给AI的消息 (%d条) ===\n", len(messages))
 	for i, msg := range messages {
@@ -698,13 +702,13 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 	if gc.defaultProvider.APIKey == "" {
 		return fmt.Errorf("AI provider not configured")
 	}
-	
+
 	fmt.Printf("使用AI提供商: %s, 模型: %s\n", gc.defaultProvider.APIType, gc.defaultProvider.ModelID)
 
 	// Call AI service with streaming
 	var response interface{}
 	var err error
-	
+
 	switch gc.defaultProvider.APIType {
 	case "openai":
 		response, err = gc.aiClient.CallOpenAI(
@@ -752,7 +756,7 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 	var fullResponse strings.Builder
 	var narrativeBuffer strings.Builder
 	var jsonStarted bool
-	
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" {
@@ -763,9 +767,9 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 		if chunk != nil {
 			if content, ok := chunk["content"].(string); ok && content != "" {
 				fullResponse.WriteString(content)
-				
+
 				if !jsonStarted {
-					// 检测是否遇到 @ 标记（新格式）或其他JSON标记  
+					// 检测是否遇到 @ 标记（新格式）或其他JSON标记
 					if strings.Contains(content, "@") || strings.Contains(content, "```json") || strings.Contains(content, "{") {
 						jsonStarted = true
 						// 发送JSON标记之前的内容
@@ -777,7 +781,7 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 						} else if jsonIndex := strings.Index(content, "{"); jsonIndex >= 0 {
 							beforeJson = content[:jsonIndex]
 						}
-						
+
 						if strings.TrimSpace(beforeJson) != "" {
 							narrativeBuffer.WriteString(beforeJson)
 							if err := streamCallback(beforeJson); err != nil {
@@ -786,6 +790,7 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 						}
 					} else {
 						// 纯narrative内容，直接发送
+						content = strings.ReplaceAll(content, "$", "")
 						narrativeBuffer.WriteString(content)
 						if err := streamCallback(content); err != nil {
 							return err
@@ -807,9 +812,9 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 
 	// Parse and apply the complete response
 	aiResponse := fullResponse.String()
-	
+
 	fmt.Printf("\n=== AI完整响应 ===\n%s\n=== 响应结束 ===\n", aiResponse)
-	
+
 	// Parse the response to check for roll_request
 	jsonStr := extractJSON(aiResponse)
 	if jsonStr == "" {
@@ -818,7 +823,7 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 		fmt.Printf("响应长度: %d 字符\n", len(aiResponse))
 		return fmt.Errorf("no valid JSON found in AI response")
 	}
-	
+
 	fmt.Printf("\n=== 提取的JSON ===\n%s\n=== JSON结束 ===\n", jsonStr)
 
 	var parsed map[string]interface{}
@@ -848,14 +853,14 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 			"outcome":     rollResult["outcome"],
 			"success":     rollResult["success"],
 		}
-		
+
 		// Send roll event to frontend
 		if rollCallback != nil {
 			if err := rollCallback(rollEvent); err != nil {
 				return err
 			}
 		}
-		
+
 		// Send roll result as separate message via streaming
 		rollResultText := fmt.Sprintf("【判定结果：%s】", rollResult["outcome"])
 		if err := streamCallback(rollResultText); err != nil {
@@ -876,28 +881,28 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 		// Second stage AI call (streaming) with retry mechanism
 		maxRetries := 3
 		var lastErr error
-		
+
 		for attempt := 1; attempt <= maxRetries; attempt++ {
 			fmt.Printf("[二阶段重试] 尝试第 %d/%d 次调用AI\n", attempt, maxRetries)
-			
+
 			err = gc.callAIStreamSecondStage(session, prompt, mod, firstNarrative, secondStageCallback)
 			if err == nil {
 				fmt.Printf("[二阶段重试] 第 %d 次调用成功\n", attempt)
 				break
 			}
-			
+
 			lastErr = err
 			fmt.Printf("[二阶段重试] 第 %d 次调用失败: %v\n", attempt, err)
-			
+
 			// 检查是否是JSON格式错误
-			if strings.Contains(err.Error(), "no valid JSON found") || 
-			   strings.Contains(err.Error(), "failed to parse") {
+			if strings.Contains(err.Error(), "no valid JSON found") ||
+				strings.Contains(err.Error(), "failed to parse") {
 				fmt.Printf("[二阶段重试] 检测到JSON格式错误，准备重试...\n")
-				
+
 				if attempt < maxRetries {
 					// 在重试前稍等一下，避免请求过于频繁
 					// time.Sleep(time.Millisecond * 500)
-					
+
 					// 修改prompt，要求AI更加注意格式
 					prompt = fmt.Sprintf("判定已完成：%s\n\n请基于此判定结果继续叙事。\n\n⚠️ 重要格式要求：\n1. 不要重复输出判定结果\n2. 不要重复之前的叙事内容\n3. 只输出基于判定结果的后续新情节\n4. 必须严格按照JSON格式输出，确保JSON语法正确\n5. 叙事内容在JSON中，不要在JSON外输出额外内容\n\n当前状态：\n%s", rollResult["outcome"], string(currentStateJSON))
 				}
@@ -907,7 +912,7 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 				break
 			}
 		}
-		
+
 		if err != nil {
 			fmt.Printf("[二阶段重试] 所有重试均失败，最后错误: %v\n", lastErr)
 			return fmt.Errorf("second stage AI call failed after %d attempts: %w", maxRetries, lastErr)
@@ -949,31 +954,31 @@ func filterDuplicateContent(secondNarrative, firstNarrative string) string {
 	if firstNarrative == "" {
 		return secondNarrative
 	}
-	
+
 	// Clean up the narratives
 	secondNarrative = strings.TrimSpace(secondNarrative)
 	firstNarrative = strings.TrimSpace(firstNarrative)
-	
-	// Simple approach: if second narrative starts with first narrative, 
+
+	// Simple approach: if second narrative starts with first narrative,
 	// return only the part after first narrative
 	if strings.HasPrefix(secondNarrative, firstNarrative) {
 		remaining := strings.TrimPrefix(secondNarrative, firstNarrative)
 		return strings.TrimSpace(remaining)
 	}
-	
+
 	// Split both narratives into sentences for better comparison
 	firstSentences := strings.Split(firstNarrative, "。")
 	secondSentences := strings.Split(secondNarrative, "。")
-	
+
 	// Find where the unique content starts in second narrative
 	uniqueStartIndex := len(secondSentences) // Default to end if no unique content found
-	
+
 	for i, sentence := range secondSentences {
 		sentence = strings.TrimSpace(sentence)
 		if sentence == "" {
 			continue
 		}
-		
+
 		// Check if this sentence exists in first narrative
 		found := false
 		for _, firstSentence := range firstSentences {
@@ -983,20 +988,20 @@ func filterDuplicateContent(secondNarrative, firstNarrative string) string {
 				break
 			}
 		}
-		
+
 		if !found {
 			uniqueStartIndex = i
 			break
 		}
 	}
-	
+
 	// Return unique sentences
 	if uniqueStartIndex < len(secondSentences) {
 		uniqueSentences := secondSentences[uniqueStartIndex:]
 		result := strings.Join(uniqueSentences, "。")
 		return strings.TrimSpace(result)
 	}
-	
+
 	// If no unique content found, return the second narrative as is
 	// (this might happen if AI generates completely new content)
 	return secondNarrative
@@ -1006,7 +1011,7 @@ func filterDuplicateContent(secondNarrative, firstNarrative string) string {
 func (gc *GameController) callAIStreamSecondStage(session *GameSession, prompt string, mod *GameMod, firstNarrative string, secondStageCallback StreamCallback) error {
 	// Build messages from session history (which already contains system prompt)
 	messages := []services.Message{}
-	
+
 	// Add conversation history (already includes system prompt from CreateSession)
 	for _, msg := range session.History {
 		messages = append(messages, services.Message{
@@ -1029,7 +1034,7 @@ func (gc *GameController) callAIStreamSecondStage(session *GameSession, prompt s
 	// Call AI service with streaming
 	var response interface{}
 	var err error
-	
+
 	switch gc.defaultProvider.APIType {
 	case "openai":
 		response, err = gc.aiClient.CallOpenAI(
@@ -1076,7 +1081,7 @@ func (gc *GameController) callAIStreamSecondStage(session *GameSession, prompt s
 
 	var fullResponse strings.Builder
 	var jsonStarted bool
-	
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" {
@@ -1087,7 +1092,7 @@ func (gc *GameController) callAIStreamSecondStage(session *GameSession, prompt s
 		if chunk != nil {
 			if content, ok := chunk["content"].(string); ok && content != "" {
 				fullResponse.WriteString(content)
-				
+
 				if !jsonStarted {
 					// 检测是否遇到 @ 标记（新格式）或其他JSON标记
 					if strings.Contains(content, "@") || strings.Contains(content, "```json") || strings.Contains(content, "{") {
@@ -1101,7 +1106,7 @@ func (gc *GameController) callAIStreamSecondStage(session *GameSession, prompt s
 						} else if jsonIndex := strings.Index(content, "{"); jsonIndex >= 0 {
 							beforeJson = content[:jsonIndex]
 						}
-						
+
 						if strings.TrimSpace(beforeJson) != "" {
 							if err := secondStageCallback(beforeJson); err != nil {
 								return err
@@ -1129,9 +1134,9 @@ func (gc *GameController) callAIStreamSecondStage(session *GameSession, prompt s
 
 	// Parse and apply the complete response
 	aiResponse := fullResponse.String()
-	
+
 	fmt.Printf("\n=== 第二阶段AI完整响应 ===\n%s\n=== 响应结束 ===\n", aiResponse)
-	
+
 	// Parse the response
 	jsonStr := extractJSON(aiResponse)
 	if jsonStr == "" {
@@ -1140,7 +1145,7 @@ func (gc *GameController) callAIStreamSecondStage(session *GameSession, prompt s
 		fmt.Printf("响应长度: %d 字符\n", len(aiResponse))
 		return fmt.Errorf("no valid JSON found in second AI response")
 	}
-	
+
 	fmt.Printf("\n=== 第二阶段提取的JSON ===\n%s\n=== JSON结束 ===\n", jsonStr)
 
 	var parsed map[string]interface{}
@@ -1159,7 +1164,7 @@ func (gc *GameController) callAIStreamSecondStage(session *GameSession, prompt s
 	// Apply state update
 	if stateUpdate, ok := parsed["state_update"].(map[string]interface{}); ok {
 		ApplyStateUpdate(session.State, stateUpdate)
-		
+
 		// Check if trial ended (game over) in second response
 		if isInTrial, exists := stateUpdate["is_in_trial"]; exists {
 			if inTrial, ok := isInTrial.(bool); ok && !inTrial {
