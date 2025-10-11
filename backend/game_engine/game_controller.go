@@ -8,7 +8,7 @@ import (
 	"io"
 	"math/rand"
 	"strings"
-	"time"
+	// "time"
 )
 
 // GameController handles game logic and AI interactions
@@ -285,7 +285,10 @@ func (gc *GameController) callAI(session *GameSession, prompt string, mod *GameM
 
 // parseAndApplyAIResponse parses AI response and applies state updates
 func (gc *GameController) parseAndApplyAIResponse(session *GameSession, aiResponse string, mod *GameMod, originalAction string) error {
-	// Extract JSON from response (handle think tags)
+	// Extract narrative from new format ($...$)
+	narrativeFromFormat := extractNarrative(aiResponse)
+	
+	// Extract JSON from response (@...@)
 	jsonStr := extractJSON(aiResponse)
 	if jsonStr == "" {
 		return fmt.Errorf("no valid JSON found in AI response")
@@ -302,8 +305,11 @@ func (gc *GameController) parseAndApplyAIResponse(session *GameSession, aiRespon
 		Content: aiResponse,
 	})
 
-	// Get narrative
-	narrative, _ := parsed["narrative"].(string)
+	// Get narrative - prefer format over JSON
+	narrative := narrativeFromFormat
+	if narrative == "" {
+		narrative, _ = parsed["narrative"].(string)
+	}
 
 	// Check if this is a roll request (two-stage judgment)
 	if rollRequest, hasRoll := parsed["roll_request"].(map[string]interface{}); hasRoll {
@@ -331,7 +337,8 @@ func (gc *GameController) parseAndApplyAIResponse(session *GameSession, aiRespon
 			return err
 		}
 
-		// Parse second response
+		// Parse second response with new format
+		narrativeFromFormat2 := extractNarrative(aiResponse2)
 		jsonStr2 := extractJSON(aiResponse2)
 		var parsed2 map[string]interface{}
 		if err := json.Unmarshal([]byte(jsonStr2), &parsed2); err != nil {
@@ -344,8 +351,12 @@ func (gc *GameController) parseAndApplyAIResponse(session *GameSession, aiRespon
 			Content: aiResponse2,
 		})
 
-		// Get second narrative
-		if narrative2, ok := parsed2["narrative"].(string); ok && narrative2 != "" {
+		// Get second narrative - prefer format over JSON
+		narrative2 := narrativeFromFormat2
+		if narrative2 == "" {
+			narrative2, _ = parsed2["narrative"].(string)
+		}
+		if narrative2 != "" {
 			session.DisplayHistory = append(session.DisplayHistory, narrative2)
 		}
 
@@ -455,15 +466,55 @@ func (gc *GameController) calculateReward(spiritStones int, mod *GameMod) int {
 	return int(scalingFactor * value)
 }
 
-// extractJSON extracts JSON from AI response (handles think tags and markdown)
-func extractJSON(response string) string {
-	// Remove think tags
+// extractNarrative extracts narrative text from AI response (handles $...$ format)
+func extractNarrative(response string) string {
+	// Remove think tags first
 	if strings.Contains(response, "<think>") && strings.Contains(response, "</think>") {
 		endIdx := strings.LastIndex(response, "</think>")
 		response = response[endIdx+8:]
 	}
 
-	// Handle markdown code blocks
+	// Handle new format: $...$ for narrative
+	if strings.Contains(response, "$") {
+		startIdx := strings.Index(response, "$")
+		if startIdx >= 0 {
+			endIdx := strings.Index(response[startIdx+1:], "$")
+			if endIdx >= 0 {
+				narrativeContent := response[startIdx+1 : startIdx+1+endIdx]
+				return strings.TrimSpace(narrativeContent)
+			}
+		}
+	}
+
+	// Fallback: try to extract narrative from JSON if no $ delimiters
+	return ""
+}
+
+// extractJSON extracts JSON from AI response (handles new format with $ and @ delimiters)
+func extractJSON(response string) string {
+	// Remove think tags first
+	if strings.Contains(response, "<think>") && strings.Contains(response, "</think>") {
+		endIdx := strings.LastIndex(response, "</think>")
+		response = response[endIdx+8:]
+	}
+
+	// Handle new format: @...@ for JSON
+	if strings.Contains(response, "@") {
+		startIdx := strings.Index(response, "@")
+		if startIdx >= 0 {
+			endIdx := strings.Index(response[startIdx+1:], "@")
+			if endIdx >= 0 {
+				jsonContent := response[startIdx+1 : startIdx+1+endIdx]
+				jsonContent = strings.TrimSpace(jsonContent)
+				// Validate it's JSON by checking if it starts with {
+				if strings.HasPrefix(jsonContent, "{") {
+					return jsonContent
+				}
+			}
+		}
+	}
+
+	// Handle markdown code blocks (fallback)
 	if strings.Contains(response, "```json") {
 		startIdx := strings.Index(response, "```json")
 		if startIdx >= 0 {
@@ -476,7 +527,7 @@ func extractJSON(response string) string {
 		}
 	}
 
-	// Handle single backticks around JSON
+	// Handle single backticks around JSON (fallback)
 	if strings.Contains(response, "`{") && strings.Contains(response, "}`") {
 		startIdx := strings.Index(response, "`{")
 		endIdx := strings.LastIndex(response, "}`")
@@ -486,7 +537,7 @@ func extractJSON(response string) string {
 		}
 	}
 
-	// Find JSON without markdown
+	// Find JSON without delimiters (fallback)
 	response = strings.TrimSpace(response)
 	
 	// Try to extract JSON block
@@ -580,7 +631,7 @@ func (gc *GameController) ProcessActionStream(playerID, modID, action string, st
 			
 			if attempt < maxRetries {
 				// 在重试前稍等一下，避免请求过于频繁
-				time.Sleep(time.Millisecond * 500)
+				// time.Sleep(time.Millisecond * 500)
 				
 				// 修改prompt，要求AI更加注意格式
 				if action == "start_new_trial" {
@@ -714,12 +765,14 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 				fullResponse.WriteString(content)
 				
 				if !jsonStarted {
-					// 检测是否遇到JSON标记或JSON开始
-					if strings.Contains(content, "```json") || strings.Contains(content, "{") {
+					// 检测是否遇到 @ 标记（新格式）或其他JSON标记  
+					if strings.Contains(content, "@") || strings.Contains(content, "```json") || strings.Contains(content, "{") {
 						jsonStarted = true
 						// 发送JSON标记之前的内容
 						beforeJson := content
-						if jsonMarkIndex := strings.Index(content, "```json"); jsonMarkIndex >= 0 {
+						if atMarkIndex := strings.Index(content, "@"); atMarkIndex >= 0 {
+							beforeJson = content[:atMarkIndex]
+						} else if jsonMarkIndex := strings.Index(content, "```json"); jsonMarkIndex >= 0 {
 							beforeJson = content[:jsonMarkIndex]
 						} else if jsonIndex := strings.Index(content, "{"); jsonIndex >= 0 {
 							beforeJson = content[:jsonIndex]
@@ -813,8 +866,12 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 		currentStateJSON, _ := json.Marshal(session.State)
 		prompt := fmt.Sprintf("判定已完成：%s\n\n请基于此判定结果继续叙事。重要提醒：\n1. 不要重复输出判定结果\n2. 不要重复之前的叙事内容\n3. 只输出基于判定结果的后续新情节\n\n当前状态：\n%s", rollResult["outcome"], string(currentStateJSON))
 
-		// Get first narrative for comparison
-		firstNarrative, _ := parsed["narrative"].(string)
+		// Get first narrative for comparison - prefer format over JSON
+		firstNarrativeFromFormat := extractNarrative(aiResponse)
+		firstNarrative := firstNarrativeFromFormat
+		if firstNarrative == "" {
+			firstNarrative, _ = parsed["narrative"].(string)
+		}
 
 		// Second stage AI call (streaming) with retry mechanism
 		maxRetries := 3
@@ -839,7 +896,7 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 				
 				if attempt < maxRetries {
 					// 在重试前稍等一下，避免请求过于频繁
-					time.Sleep(time.Millisecond * 500)
+					// time.Sleep(time.Millisecond * 500)
 					
 					// 修改prompt，要求AI更加注意格式
 					prompt = fmt.Sprintf("判定已完成：%s\n\n请基于此判定结果继续叙事。\n\n⚠️ 重要格式要求：\n1. 不要重复输出判定结果\n2. 不要重复之前的叙事内容\n3. 只输出基于判定结果的后续新情节\n4. 必须严格按照JSON格式输出，确保JSON语法正确\n5. 叙事内容在JSON中，不要在JSON外输出额外内容\n\n当前状态：\n%s", rollResult["outcome"], string(currentStateJSON))
@@ -1032,12 +1089,14 @@ func (gc *GameController) callAIStreamSecondStage(session *GameSession, prompt s
 				fullResponse.WriteString(content)
 				
 				if !jsonStarted {
-					// 检测是否遇到JSON标记或JSON开始
-					if strings.Contains(content, "```json") || strings.Contains(content, "{") {
+					// 检测是否遇到 @ 标记（新格式）或其他JSON标记
+					if strings.Contains(content, "@") || strings.Contains(content, "```json") || strings.Contains(content, "{") {
 						jsonStarted = true
 						// 发送JSON标记之前的内容
 						beforeJson := content
-						if jsonMarkIndex := strings.Index(content, "```json"); jsonMarkIndex >= 0 {
+						if atMarkIndex := strings.Index(content, "@"); atMarkIndex >= 0 {
+							beforeJson = content[:atMarkIndex]
+						} else if jsonMarkIndex := strings.Index(content, "```json"); jsonMarkIndex >= 0 {
 							beforeJson = content[:jsonMarkIndex]
 						} else if jsonIndex := strings.Index(content, "{"); jsonIndex >= 0 {
 							beforeJson = content[:jsonIndex]
