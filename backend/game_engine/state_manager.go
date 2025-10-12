@@ -12,13 +12,15 @@ import (
 
 // GameSession represents a player's game session
 type GameSession struct {
-	PlayerID    string                 `json:"player_id"`
-	ModID       string                 `json:"mod_id"`
-	SessionDate string                 `json:"session_date"`
-	State       map[string]interface{} `json:"state"`        // Dynamic state based on mod config
-	History     []Message              `json:"internal_history"` // AI conversation history
-	DisplayHistory []string            `json:"display_history"`  // User-facing narrative
-	LastModified   time.Time          `json:"last_modified"`
+	PlayerID         string                 `json:"player_id"`
+	ModID            string                 `json:"mod_id"`
+	SessionDate      string                 `json:"session_date"`
+	State            map[string]interface{} `json:"state"`        // Dynamic state based on mod config
+	RecentHistory    []Message              `json:"recent_history"`     // 最近4条对话
+	CompressedSummary string                `json:"compressed_summary"` // 压缩摘要
+	CompressionRound int                    `json:"compression_round"`  // 压缩轮次
+	DisplayHistory   []string               `json:"display_history"`  // User-facing narrative
+	LastModified     time.Time              `json:"last_modified"`
 	
 	// 预留社交功能字段
 	Social *SocialData `json:"social,omitempty"` // 社交数据（预留）
@@ -55,8 +57,9 @@ type TradeOffer struct {
 
 // Message represents a chat message in the AI conversation
 type Message struct {
-	Role    string `json:"role"`    // system, user, assistant
-	Content string `json:"content"`
+	Role      string    `json:"role"`    // system, user, assistant
+	Content   string    `json:"content"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 // StateManager handles game session storage and retrieval
@@ -181,13 +184,15 @@ func (sm *StateManager) CreateSession(playerID, modID string, initialState map[s
 	defer sm.mu.Unlock()
 	
 	session := &GameSession{
-		PlayerID:       playerID,
-		ModID:          modID,
-		SessionDate:    time.Now().Format("2006-01-02"),
-		State:          initialState,
-		History:        []Message{{Role: "system", Content: systemPrompt}},
-		DisplayHistory: []string{},
-		LastModified:   time.Now(),
+		PlayerID:         playerID,
+		ModID:            modID,
+		SessionDate:      time.Now().Format("2006-01-02"),
+		State:            initialState,
+		RecentHistory:    []Message{}, // 不再存储系统提示词
+		CompressedSummary: "",
+		CompressionRound: 0,
+		DisplayHistory:   []string{},
+		LastModified:     time.Now(),
 	}
 	
 	// Ensure player's sessions map exists
@@ -242,10 +247,10 @@ func (sm *StateManager) loadFromDB(playerID, modID string) (*GameSession, error)
 		return nil, fmt.Errorf("failed to unmarshal state: %w", err)
 	}
 	
-	var history []Message
-	if gameSave.History != "" {
-		if err := json.Unmarshal([]byte(gameSave.History), &history); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal history: %w", err)
+	var recentHistory []Message
+	if gameSave.RecentHistory != "" {
+		if err := json.Unmarshal([]byte(gameSave.RecentHistory), &recentHistory); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal recent history: %w", err)
 		}
 	}
 	
@@ -257,13 +262,15 @@ func (sm *StateManager) loadFromDB(playerID, modID string) (*GameSession, error)
 	}
 	
 	session := &GameSession{
-		PlayerID:       playerID,
-		ModID:          modID,
-		SessionDate:    gameSave.SessionDate,
-		State:          state,
-		History:        history,
-		DisplayHistory: displayHistory,
-		LastModified:   gameSave.UpdatedAt,
+		PlayerID:         playerID,
+		ModID:            modID,
+		SessionDate:      gameSave.SessionDate,
+		State:            state,
+		RecentHistory:    recentHistory,
+		CompressedSummary: gameSave.CompressedSummary,
+		CompressionRound: gameSave.CompressionRound,
+		DisplayHistory:   displayHistory,
+		LastModified:     gameSave.UpdatedAt,
 	}
 	
 	return session, nil
@@ -281,9 +288,9 @@ func (sm *StateManager) saveToDB(session *GameSession) error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 	
-	historyJSON, err := json.Marshal(session.History)
+	recentHistoryJSON, err := json.Marshal(session.RecentHistory)
 	if err != nil {
-		return fmt.Errorf("failed to marshal history: %w", err)
+		return fmt.Errorf("failed to marshal recent history: %w", err)
 	}
 	
 	displayHistoryJSON, err := json.Marshal(session.DisplayHistory)
@@ -292,12 +299,14 @@ func (sm *StateManager) saveToDB(session *GameSession) error {
 	}
 	
 	gameSave := models.GameSave{
-		UserID:         uint(userID),
-		ModID:          session.ModID,
-		SessionDate:    session.SessionDate,
-		State:          string(stateJSON),
-		History:        string(historyJSON),
-		DisplayHistory: string(displayHistoryJSON),
+		UserID:           uint(userID),
+		ModID:            session.ModID,
+		SessionDate:      session.SessionDate,
+		State:            string(stateJSON),
+		RecentHistory:    string(recentHistoryJSON),
+		CompressedSummary: session.CompressedSummary,
+		CompressionRound: session.CompressionRound,
+		DisplayHistory:   string(displayHistoryJSON),
 	}
 	
 	result := config.DB.Where("user_id = ? AND mod_id = ?", userID, session.ModID).

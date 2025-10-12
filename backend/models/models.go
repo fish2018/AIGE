@@ -59,16 +59,18 @@ type Model struct {
 }
 
 type GameSave struct {
-	ID             uint           `json:"id" gorm:"primaryKey"`
-	UserID         uint           `json:"user_id" gorm:"not null;index:idx_user_mod"`
-	ModID          string         `json:"mod_id" gorm:"not null;index:idx_user_mod"`
-	SessionDate    string         `json:"session_date" gorm:"not null"`
-	State          string         `json:"state" gorm:"type:text;not null"`
-	History        string         `json:"history" gorm:"type:text"`
-	DisplayHistory string         `json:"display_history" gorm:"type:text"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-	DeletedAt      gorm.DeletedAt `json:"-" gorm:"index"`
+	ID               uint           `json:"id" gorm:"primaryKey"`
+	UserID           uint           `json:"user_id" gorm:"not null;index:idx_user_mod"`
+	ModID            string         `json:"mod_id" gorm:"not null;index:idx_user_mod"`
+	SessionDate      string         `json:"session_date" gorm:"not null"`
+	State            string         `json:"state" gorm:"type:text;not null"`
+	RecentHistory    string         `json:"recent_history" gorm:"type:text"`
+	CompressedSummary string        `json:"compressed_summary" gorm:"type:text"`
+	CompressionRound int            `json:"compression_round" gorm:"default:0"`
+	DisplayHistory   string         `json:"display_history" gorm:"type:text"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	DeletedAt        gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 type SystemConfig struct {

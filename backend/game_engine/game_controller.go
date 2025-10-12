@@ -8,14 +8,15 @@ import (
 	"io"
 	"math/rand"
 	"strings"
-	// "time"
+	"time"
 )
 
 // GameController handles game logic and AI interactions
 type GameController struct {
-	modLoader    *ModLoader
-	stateManager *StateManager
-	aiClient     *services.AIClient
+	modLoader          *ModLoader
+	stateManager       *StateManager
+	aiClient           *services.AIClient
+	compressionManager *CompressionManager // 新增
 	// AI配置（从数据库或配置文件加载）
 	defaultProvider AIProvider
 }
@@ -30,10 +31,14 @@ type AIProvider struct {
 
 // NewGameController creates a new game controller
 func NewGameController(modLoader *ModLoader, stateManager *StateManager) *GameController {
-	return &GameController{
-		modLoader:    modLoader,
-		stateManager: stateManager,
-		aiClient:     services.NewAIClient(),
+	aiClient := services.NewAIClient()
+	compressionManager := NewCompressionManager(aiClient, stateManager)
+	
+	gc := &GameController{
+		modLoader:          modLoader,
+		stateManager:       stateManager,
+		aiClient:           aiClient,
+		compressionManager: compressionManager,
 		// 默认配置，应该从数据库或环境变量加载
 		defaultProvider: AIProvider{
 			APIType: "openai",
@@ -42,6 +47,11 @@ func NewGameController(modLoader *ModLoader, stateManager *StateManager) *GameCo
 			ModelID: "gpt-4o-mini",
 		},
 	}
+	
+	// 设置压缩管理器的GameController引用
+	compressionManager.SetGameController(gc)
+	
+	return gc
 }
 
 // SetAIProvider 设置AI提供商配置
@@ -167,10 +177,12 @@ func (gc *GameController) ProcessAction(playerID, modID, action string) error {
 
 	// Note: User action is already added to display_history by frontend for immediate display
 	// Only add to internal history for AI context
-	session.History = append(session.History, Message{
-		Role:    "user",
-		Content: action,
-	})
+	userMsg := Message{
+		Role:      "user",
+		Content:   action,
+		Timestamp: time.Now(),
+	}
+	session.RecentHistory = append(session.RecentHistory, userMsg)
 
 	// Call AI
 	currentStateJSON, _ := json.Marshal(session.State)
@@ -197,39 +209,51 @@ func (gc *GameController) ProcessAction(playerID, modID, action string) error {
 	return nil
 }
 
-// callAI calls the AI service
-func (gc *GameController) callAI(session *GameSession, prompt string, mod *GameMod) (string, error) {
-	// Build messages
-	messages := make([]services.Message, len(session.History))
-	for i, msg := range session.History {
-		messages[i] = services.Message{
+// buildAIMessages builds AI messages using new compression system
+func (gc *GameController) buildAIMessages(session *GameSession, userPrompt string, mod *GameMod) []services.Message {
+	messages := []services.Message{}
+	
+	// 1. 动态加载最新系统提示词
+	messages = append(messages, services.Message{
+		Role:    "system",
+		Content: mod.Prompts["game_master"], // 始终使用最新版本
+	})
+	
+	// 2. 添加压缩摘要（如果存在）
+	if session.CompressedSummary != "" {
+		fmt.Printf("[消息构建] 添加压缩摘要，长度: %d 字符\n", len(session.CompressedSummary))
+		messages = append(messages, services.Message{
+			Role:    "system",
+			Content: fmt.Sprintf("【历史摘要】%s", session.CompressedSummary),
+		})
+	} else {
+		fmt.Printf("[消息构建] 无压缩摘要\n")
+	}
+	
+	// 3. 添加最近4条对话
+	fmt.Printf("[消息构建] 添加最近历史记录: %d 条\n", len(session.RecentHistory))
+	for _, msg := range session.RecentHistory {
+		messages = append(messages, services.Message{
 			Role:    msg.Role,
 			Content: msg.Content,
-		}
+		})
 	}
-
-	// Add current prompt
+	
+	// 4. 添加当前用户输入
 	messages = append(messages, services.Message{
 		Role:    "user",
-		Content: prompt,
+		Content: userPrompt,
 	})
+	
+	fmt.Printf("[消息构建] 总消息数: %d (系统提示词 + 摘要 + 历史记录 + 当前输入)\n", len(messages))
+	
+	return messages
+}
 
-	// Token management - trim history if too long
-	maxTokens := mod.Config.GameConfig.MaxTokenHistory
-	totalLength := 0
-	for _, msg := range messages {
-		totalLength += len(msg.Content)
-	}
-
-	for totalLength > maxTokens && len(messages) > 2 {
-		// Remove a random message from history (keep first system message)
-		removeIdx := rand.Intn(len(messages)-2) + 1
-		messages = append(messages[:removeIdx], messages[removeIdx+1:]...)
-		totalLength = 0
-		for _, msg := range messages {
-			totalLength += len(msg.Content)
-		}
-	}
+// callAI calls the AI service
+func (gc *GameController) callAI(session *GameSession, prompt string, mod *GameMod) (string, error) {
+	// 使用新的消息构建方法
+	messages := gc.buildAIMessages(session, prompt, mod)
 
 	// Check if AI provider is configured
 	if gc.defaultProvider.APIKey == "" {
@@ -302,9 +326,10 @@ func (gc *GameController) parseAndApplyAIResponse(session *GameSession, aiRespon
 	}
 
 	// Add AI response to history
-	session.History = append(session.History, Message{
-		Role:    "assistant",
-		Content: aiResponse,
+	session.RecentHistory = append(session.RecentHistory, Message{
+		Role:      "assistant",
+		Content:   aiResponse,
+		Timestamp: time.Now(),
 	})
 
 	// Get narrative - prefer format over JSON
@@ -349,10 +374,12 @@ func (gc *GameController) parseAndApplyAIResponse(session *GameSession, aiRespon
 		}
 
 		// Add second response to history
-		session.History = append(session.History, Message{
-			Role:    "assistant",
-			Content: aiResponse2,
-		})
+		aiMsg2 := Message{
+			Role:      "assistant",
+			Content:   aiResponse2,
+			Timestamp: time.Now(),
+		}
+		session.RecentHistory = append(session.RecentHistory, aiMsg2)
 
 		// Get second narrative - prefer format over JSON
 		narrative2 := narrativeFromFormat2
@@ -591,10 +618,12 @@ func (gc *GameController) ProcessActionStream(playerID, modID, action string, st
 
 	// Note: User action is already added to display_history by frontend for immediate display
 	// Only add to internal history for AI context
-	session.History = append(session.History, Message{
-		Role:    "user",
-		Content: action,
-	})
+	userMsg := Message{
+		Role:      "user",
+		Content:   action,
+		Timestamp: time.Now(),
+	}
+	session.RecentHistory = append(session.RecentHistory, userMsg)
 
 	var prompt string
 
@@ -670,22 +699,8 @@ func (gc *GameController) ProcessActionStream(playerID, modID, action string, st
 
 // callAIStream calls AI service with streaming support
 func (gc *GameController) callAIStream(session *GameSession, prompt string, mod *GameMod, originalAction string, streamCallback StreamCallback, rollCallback RollEventCallback, secondStageCallback StreamCallback) error {
-	// Build messages from session history (which already contains system prompt)
-	messages := []services.Message{}
-
-	// Add conversation history (already includes system prompt from CreateSession)
-	for _, msg := range session.History {
-		messages = append(messages, services.Message{
-			Role:    msg.Role,
-			Content: msg.Content,
-		})
-	}
-
-	// Add current prompt
-	messages = append(messages, services.Message{
-		Role:    "user",
-		Content: prompt,
-	})
+	// 使用新的消息构建方法
+	messages := gc.buildAIMessages(session, prompt, mod)
 
 	// 调试：打印发送给AI的消息
 	fmt.Printf("\n=== 发送给AI的消息 (%d条) ===\n", len(messages))
@@ -833,11 +848,21 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 		return fmt.Errorf("failed to parse AI response JSON: %w", err)
 	}
 
-	// Add to history
-	session.History = append(session.History, Message{
-		Role:    "assistant",
-		Content: aiResponse,
-	})
+	// Add to history and handle compression
+	aiMsg := Message{
+		Role:      "assistant",
+		Content:   aiResponse,
+		Timestamp: time.Now(),
+	}
+	
+	// 获取最后一条用户消息
+	var lastUserMsg Message
+	if len(session.RecentHistory) > 0 {
+		lastUserMsg = session.RecentHistory[len(session.RecentHistory)-1]
+	}
+	
+	// 处理对话历史压缩
+	gc.compressionManager.ProcessNewMessage(session, lastUserMsg, aiMsg)
 
 	// Check if this is a roll request (two-stage judgment)
 	if rollRequest, hasRoll := parsed["roll_request"].(map[string]interface{}); hasRoll {
@@ -1010,21 +1035,7 @@ func filterDuplicateContent(secondNarrative, firstNarrative string) string {
 // callAIStreamSecondStage calls AI service for second stage with streaming support
 func (gc *GameController) callAIStreamSecondStage(session *GameSession, prompt string, mod *GameMod, firstNarrative string, secondStageCallback StreamCallback) error {
 	// Build messages from session history (which already contains system prompt)
-	messages := []services.Message{}
-
-	// Add conversation history (already includes system prompt from CreateSession)
-	for _, msg := range session.History {
-		messages = append(messages, services.Message{
-			Role:    msg.Role,
-			Content: msg.Content,
-		})
-	}
-
-	// Add current prompt
-	messages = append(messages, services.Message{
-		Role:    "user",
-		Content: prompt,
-	})
+	messages := gc.buildAIMessages(session, prompt, mod)
 
 	// Check if AI provider is configured
 	if gc.defaultProvider.APIKey == "" {
@@ -1156,11 +1167,13 @@ func (gc *GameController) callAIStreamSecondStage(session *GameSession, prompt s
 		return fmt.Errorf("failed to parse second AI response JSON: %w", err)
 	}
 
-	// Add to history
-	session.History = append(session.History, Message{
-		Role:    "assistant",
-		Content: aiResponse,
-	})
+	// Add to history and handle compression
+	aiMsg := Message{
+		Role:      "assistant",
+		Content:   aiResponse,
+		Timestamp: time.Now(),
+	}
+	session.RecentHistory = append(session.RecentHistory, aiMsg)
 
 	// Apply state update
 	if stateUpdate, ok := parsed["state_update"].(map[string]interface{}); ok {
