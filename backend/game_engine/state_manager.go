@@ -209,6 +209,7 @@ func (sm *StateManager) DeleteSession(playerID, modID string) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	
+	// Delete from memory
 	if playerSessions, exists := sm.sessions[playerID]; exists {
 		delete(playerSessions, modID)
 		// If player has no more sessions, remove player entry
@@ -216,6 +217,19 @@ func (sm *StateManager) DeleteSession(playerID, modID string) error {
 			delete(sm.sessions, playerID)
 		}
 	}
+	
+	// Delete from database (physical deletion)
+	userID, err := strconv.ParseUint(playerID, 10, 32)
+	if err != nil {
+		return fmt.Errorf("invalid player ID: %w", err)
+	}
+	
+	result := config.DB.Unscoped().Where("user_id = ? AND mod_id = ?", userID, modID).Delete(&models.GameSave{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete session from database: %w", result.Error)
+	}
+	
+	fmt.Printf("[StateManager] 物理删除存档: 用户%s mod%s, 删除了%d条记录\n", playerID, modID, result.RowsAffected)
 	
 	return nil
 }
@@ -225,7 +239,22 @@ func (sm *StateManager) DeletePlayerSessions(playerID string) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	
+	// Delete from memory
 	delete(sm.sessions, playerID)
+	
+	// Delete from database (physical deletion)
+	userID, err := strconv.ParseUint(playerID, 10, 32)
+	if err != nil {
+		return fmt.Errorf("invalid player ID: %w", err)
+	}
+	
+	result := config.DB.Unscoped().Where("user_id = ?", userID).Delete(&models.GameSave{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete player sessions from database: %w", result.Error)
+	}
+	
+	fmt.Printf("[StateManager] 物理删除玩家所有存档: 用户%s, 删除了%d条记录\n", playerID, result.RowsAffected)
+	
 	return nil
 }
 
@@ -309,6 +338,7 @@ func (sm *StateManager) saveToDB(session *GameSession) error {
 		DisplayHistory:   string(displayHistoryJSON),
 	}
 	
+	// Use ON CONFLICT (upsert) to ensure only one record per user_id + mod_id
 	result := config.DB.Where("user_id = ? AND mod_id = ?", userID, session.ModID).
 		Assign(gameSave).
 		FirstOrCreate(&gameSave)

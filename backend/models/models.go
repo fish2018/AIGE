@@ -60,8 +60,8 @@ type Model struct {
 
 type GameSave struct {
 	ID               uint           `json:"id" gorm:"primaryKey"`
-	UserID           uint           `json:"user_id" gorm:"not null;index:idx_user_mod"`
-	ModID            string         `json:"mod_id" gorm:"not null;index:idx_user_mod"`
+	UserID           uint           `json:"user_id" gorm:"not null;uniqueIndex:idx_user_mod"`
+	ModID            string         `json:"mod_id" gorm:"not null;uniqueIndex:idx_user_mod"`
 	SessionDate      string         `json:"session_date" gorm:"not null"`
 	State            string         `json:"state" gorm:"type:text;not null"`
 	RecentHistory    string         `json:"recent_history" gorm:"type:text"`

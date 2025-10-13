@@ -520,7 +520,7 @@ func RestartOpportunities(c *gin.Context) {
 
 	// 删除该用户的所有游戏存档
 	db := config.DB
-	result := db.Where("user_id = ?", userID).Delete(&models.GameSave{})
+	result := db.Unscoped().Where("user_id = ?", userID).Delete(&models.GameSave{})
 	if result.Error != nil {
 		fmt.Printf("❌ 删除游戏存档失败: %v\n", result.Error)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除存档失败"})
