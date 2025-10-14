@@ -29,28 +29,63 @@
     <div v-else class="game-play">
       <!-- 游戏头部 -->
       <header class="game-header">
-        <div class="game-title">
-          <h2>{{ currentModInfo?.name }}</h2>
-          <span class="mod-id">{{ currentGame }}</span>
-        </div>
-        <div class="game-actions">
-          <span class="opportunities">
-            剩余机缘: <strong>{{ sessionState?.opportunities_remaining ?? 10 }}</strong>
-          </span>
-          <button @click="saveGame" class="btn-save" :disabled="isSaving">
-            {{ isSaving ? '存档中...' : '💾 手动存档' }}
-          </button>
-          <button @click="showRestartConfirm" class="btn-restart" title="清空所有存档，重新开始">
-            🔄 重启机缘
-          </button>
-          <button @click="switchGame" class="btn-secondary">切换游戏</button>
-          <button @click="logout" class="btn-danger">退出</button>
+        <div class="header-top">
+          <div class="game-title">
+            <h2>{{ currentModInfo?.name }}</h2>
+            <span class="mod-id">{{ currentGame }}</span>
+          </div>
+          <div class="game-actions">
+            <!-- PC端按钮 -->
+            <div class="pc-actions">
+              <span class="opportunities">
+                剩余机缘: <strong>{{ sessionState?.opportunities_remaining ?? 10 }}</strong>
+              </span>
+              <button @click="saveGame" class="btn-save" :disabled="isSaving">
+                {{ isSaving ? '存档中...' : '💾 手动存档' }}
+              </button>
+              <button @click="showRestartConfirm" class="btn-restart" title="清空所有存档，重新开始">
+                🔄 重启机缘
+              </button>
+              <button @click="switchGame" class="btn-secondary">切换游戏</button>
+              <button @click="logout" class="btn-danger">退出</button>
+            </div>
+            <!-- 移动端菜单按钮 -->
+            <div class="mobile-actions">
+              <span class="opportunities mobile-opportunities-inline">
+                剩余机缘: <strong>{{ sessionState?.opportunities_remaining ?? 10 }}</strong>
+              </span>
+              <button @click="toggleStatusPanel" class="btn-status" :class="{ active: showStatusPanel }">
+                状态
+              </button>
+              <button @click="toggleMobileMenu" class="btn-menu">
+                ⚙️
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
+      <!-- 移动端菜单 -->
+      <div v-if="showMobileMenu" class="mobile-menu-overlay" @click="closeMobileMenu">
+        <div class="mobile-menu" @click.stop>
+          <button @click="saveGame; closeMobileMenu()" :disabled="isSaving">
+            {{ isSaving ? '存档中...' : '💾 手动存档' }}
+          </button>
+          <button @click="showRestartConfirm(); closeMobileMenu()">
+            🔄 重启机缘
+          </button>
+          <button @click="switchGame; closeMobileMenu()">
+            🎮 切换游戏
+          </button>
+          <button @click="logout; closeMobileMenu()">
+            🚪 退出
+          </button>
+        </div>
+      </div>
+
       <div class="game-content">
-        <!-- 左侧状态面板 -->
-        <aside class="status-panel">
+        <!-- PC端左侧状态面板 -->
+        <aside class="status-panel pc-status-panel">
           <div class="panel-header">
             <h3>角色状态</h3>
           </div>
@@ -67,7 +102,7 @@
           </div>
         </aside>
 
-        <!-- 右侧游戏主内容 -->
+        <!-- 游戏主内容 -->
         <main class="game-main">
           <!-- 叙事窗口 -->
           <div class="narrative-window" ref="narrativeWindow">
@@ -78,9 +113,13 @@
               v-html="renderMarkdown(text)"
             ></div>
           </div>
+        </main>
+      </div>
 
-          <!-- 输入区域 -->
-          <footer class="input-area">
+      <!-- 移动端输入区域 -->
+      <div class="mobile-input-area">
+        <!-- 输入区域 -->
+        <div class="input-area">
             <button 
               v-if="!sessionState?.is_in_trial && !sessionState?.daily_success_achieved" 
               @click="startTrial"
@@ -111,8 +150,28 @@
             <div v-else-if="sessionState?.daily_success_achieved" class="success-message">
               <p>🎉 今日功德圆满！明日再来。</p>
             </div>
-          </footer>
-        </main>
+        </div>
+      </div>
+
+      <!-- 移动端状态面板抽屉 -->
+      <div v-if="showStatusPanel" class="mobile-status-overlay" @click="closeStatusPanel">
+        <div class="mobile-status-panel" @click.stop :class="{ show: showStatusPanel }">
+          <div class="status-panel-header">
+            <h3>角色状态</h3>
+            <button @click="closeStatusPanel" class="close-btn">✕</button>
+          </div>
+          <div class="status-panel-content">
+            <div v-if="filteredCurrentLife" class="character-status">
+              <div v-for="(value, key) in filteredCurrentLife" :key="key" class="status-item">
+                <div class="status-key">{{ formatKey(key) }}</div>
+                <div class="status-value" v-html="formatValue(value)"></div>
+              </div>
+            </div>
+            <div v-else class="no-character">
+              <p>尚未开始冒险</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -193,6 +252,10 @@ const filteredCurrentLife = computed(() => {
   return Object.keys(filtered).length > 0 ? filtered : null
 })
 const userInput = ref('')
+
+// 移动端状态管理
+const showStatusPanel = ref(false)
+const showMobileMenu = ref(false)
 const isProcessing = computed(() => sessionState.value?.is_processing || false)
 const isLoading = ref(false)
 const loadingText = ref('加载中...')
@@ -677,6 +740,24 @@ async function restartOpportunities() {
   } finally {
     isLoading.value = false
   }
+}
+
+// 移动端状态面板控制
+function toggleStatusPanel() {
+  showStatusPanel.value = !showStatusPanel.value
+}
+
+function closeStatusPanel() {
+  showStatusPanel.value = false
+}
+
+// 移动端菜单控制
+function toggleMobileMenu() {
+  showMobileMenu.value = !showMobileMenu.value
+}
+
+function closeMobileMenu() {
+  showMobileMenu.value = false
 }
 
 // 切换游戏
@@ -1863,5 +1944,441 @@ onUnmounted(() => {
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* ============ PC端样式 (1024px以上) ============ */
+@media (min-width: 1025px) {
+  /* 隐藏移动端元素 */
+  .mobile-actions {
+    display: none;
+  }
+  
+  .mobile-input-area {
+    display: none;
+  }
+  
+  .mobile-opportunities {
+    display: none;
+  }
+  
+  .mobile-status-overlay,
+  .mobile-menu-overlay {
+    display: none;
+  }
+  
+  /* 显示PC端元素 */
+  .pc-actions {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+  
+  .pc-status-panel {
+    display: flex;
+  }
+  
+  /* PC端保持原有布局 */
+  .game-header {
+    flex-direction: row !important;
+    padding: 1rem 2rem !important;
+  }
+  
+  .header-top {
+    width: 100%;
+  }
+}
+
+/* ============ 移动端适配样式 (1024px以下) ============ */
+@media (max-width: 1024px) {
+  /* 隐藏PC端元素 */
+  .pc-actions {
+    display: none;
+  }
+  
+  .pc-status-panel {
+    display: none;
+  }
+  
+  /* 显示移动端元素 */
+  .mobile-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  
+  /* 头部布局调整 */
+  .game-header {
+    padding: 0.75rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  /* 第一行：标题和按钮 */
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+  }
+  
+  .game-title {
+    flex: 1;
+  }
+  
+  .game-title h2 {
+    font-size: 1.2rem;
+    margin: 0;
+  }
+  
+  .mod-id {
+    display: none; /* 移动端隐藏mod-id */
+  }
+  
+  .game-actions {
+    flex-shrink: 0;
+  }
+  
+  /* 移动端机缘信息 */
+  .mobile-opportunities-inline {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.9);
+    padding: 0.25rem 0.5rem;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    white-space: nowrap;
+  }
+  
+  .mobile-opportunities-inline strong {
+    color: #ffd700;
+  }
+  
+  /* 移动端按钮样式 */
+  .btn-status, .btn-menu {
+    min-width: 44px;
+    min-height: 44px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1rem;
+  }
+  
+  .btn-status:hover, .btn-menu:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  
+  .btn-status.active {
+    background: rgba(255, 255, 255, 0.4);
+  }
+  
+  /* 移动端菜单 */
+  .mobile-menu-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .mobile-menu {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin: 1rem;
+    max-width: 300px;
+    width: 100%;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .mobile-menu button {
+    min-height: 48px;
+    border: none;
+    border-radius: 8px;
+    background: #667eea;
+    color: white;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+  
+  .mobile-menu button:hover {
+    background: #5a6fd8;
+  }
+  
+  .mobile-menu button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+  }
+  
+  /* 游戏内容区域调整 */
+  .game-content {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: none;
+  }
+  
+  .game-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .narrative-window {
+    flex: 1;
+    padding: 1rem;
+    margin-bottom: 0;
+  }
+  
+  /* 移动端输入区域 */
+  .mobile-input-area {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-top: 1px solid #e0e0e0;
+    padding: 1rem;
+    z-index: 100;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .input-area {
+    margin: 0;
+  }
+  
+  .action-input-row {
+    gap: 0.75rem;
+  }
+  
+  .action-input {
+    font-size: 16px; /* 防止iOS缩放 */
+    padding: 0.75rem;
+  }
+  
+  .btn-primary, .btn-start {
+    min-height: 48px;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    white-space: nowrap;
+  }
+  
+  /* 移动端状态面板抽屉 */
+  .mobile-status-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: flex;
+    align-items: flex-end;
+  }
+  
+  .mobile-status-panel {
+    background: white;
+    width: 100%;
+    max-height: 70vh;
+    border-radius: 16px 16px 0 0;
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .mobile-status-panel.show {
+    transform: translateY(0);
+  }
+  
+  .status-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    background: #667eea;
+    color: white;
+    border-radius: 16px 16px 0 0;
+  }
+  
+  .status-panel-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+  }
+  
+  .close-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    cursor: pointer;
+    min-width: 32px;
+    min-height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .close-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+  
+  .status-panel-content {
+    flex: 1;
+    padding: 1rem 1.5rem;
+    overflow-y: auto;
+  }
+  
+  /* 调整叙事块字体大小 */
+  .narrative-block {
+    font-size: 0.95rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+  }
+  
+  /* 调整状态项样式 */
+  .status-item {
+    margin-bottom: 0.5rem;
+    padding: 0.75rem;
+    font-size: 0.9rem;
+  }
+  
+  /* 游戏选择界面移动端优化 */
+  .game-selection {
+    padding: 1rem;
+  }
+  
+  .selection-header h1 {
+    font-size: 2rem;
+  }
+  
+  .selection-header p {
+    font-size: 1rem;
+  }
+  
+  .game-list {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .game-card {
+    padding: 1.5rem;
+  }
+  
+  .game-card h3 {
+    font-size: 1.3rem;
+  }
+  
+  /* 为移动端底部输入区域预留空间 */
+  .game-main {
+    padding-bottom: 120px; /* 为固定输入区域预留空间 */
+  }
+  
+  /* 判定动画面板移动端优化 */
+  .roll-panel {
+    margin: 1rem;
+    padding: 2rem;
+    max-width: calc(100vw - 2rem);
+  }
+  
+  .dice-cup {
+    font-size: 4rem;
+  }
+  
+  /* 加载动画移动端优化 */
+  .loading-spinner {
+    padding: 1rem;
+  }
+  
+  .spinner {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .loading-text {
+    font-size: 1rem;
+  }
+}
+
+/* 小屏幕进一步优化 (480px以下) */
+@media (max-width: 480px) {
+  .game-header {
+    padding: 0.5rem;
+  }
+  
+  .game-title h2 {
+    font-size: 1.1rem;
+  }
+  
+  .mobile-opportunities-inline {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.4rem;
+  }
+  
+  .mobile-actions {
+    gap: 0.25rem;
+  }
+  
+  .narrative-window {
+    padding: 0.75rem;
+  }
+  
+  .narrative-block {
+    font-size: 0.9rem;
+    padding: 0.5rem;
+  }
+  
+  .mobile-input-area {
+    padding: 0.75rem;
+  }
+  
+  .btn-primary, .btn-start {
+    min-height: 44px;
+    font-size: 0.9rem;
+  }
+  
+  .mobile-menu {
+    margin: 0.5rem;
+    padding: 1rem;
+  }
+  
+  .status-panel-content {
+    padding: 0.75rem 1rem;
+  }
+  
+  .status-item {
+    padding: 0.5rem;
+    font-size: 0.85rem;
+  }
+}
+
+/* 横屏模式特殊处理 */
+@media (max-width: 1024px) and (orientation: landscape) and (max-height: 600px) {
+  .mobile-status-panel {
+    max-height: 80vh;
+  }
+  
+  .game-main {
+    padding-bottom: 100px;
+  }
+  
+  .mobile-input-area {
+    padding: 0.5rem 1rem;
+  }
 }
 </style>
