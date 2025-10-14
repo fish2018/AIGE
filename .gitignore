@@ -1,0 +1,7 @@
+# 操作系统文件
+.DS_Store
+
+# 项目特定忽略
+mods/.DS_Store
+backend/chat.db
+frontend/node_modules/

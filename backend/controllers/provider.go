@@ -85,9 +85,9 @@ func DeleteProvider(c *gin.Context) {
 		return
 	}
 
-	config.DB.Where("provider_id = ?", providerID).Delete(&models.Model{})
+	config.DB.Unscoped().Where("provider_id = ?", providerID).Delete(&models.Model{})
 
-	if err := config.DB.Delete(&provider).Error; err != nil {
+	if err := config.DB.Unscoped().Delete(&provider).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete provider"})
 		return
 	}

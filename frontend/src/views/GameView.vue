@@ -612,7 +612,7 @@ async function saveGame() {
 
 // 显示重启确认对话框
 function showRestartConfirm() {
-  if (confirm('⚠️ 确定要重启机缘吗？\n\n这将会：\n• 清空所有存档数据\n• 重置机缘次数为10次\n• 无法恢复已删除的数据\n\n确认继续？')) {
+  if (confirm('⚠️ 确定要重启机缘吗？\n\n这将会：\n• 清空当前游戏的存档数据\n• 重置机缘次数为10次\n• 无法恢复已删除的数据\n\n确认继续？')) {
     restartOpportunities()
   }
 }
@@ -630,7 +630,10 @@ async function restartOpportunities() {
       headers: {
         'Authorization': `Bearer ${authStore.token}`,
         'Content-Type': 'application/json'
-      }
+      },
+      body: JSON.stringify({
+        mod_id: currentGame.value
+      })
     })
 
     if (response.ok) {

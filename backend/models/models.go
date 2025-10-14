@@ -17,16 +17,6 @@ type User struct {
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
-type ChatMessage struct {
-	ID        uint           `json:"id" gorm:"primaryKey"`
-	UserID    uint           `json:"user_id" gorm:"not null"`
-	User      User           `json:"user" gorm:"foreignKey:UserID"`
-	Message   string         `json:"message" gorm:"type:text;not null"`
-	Response  string         `json:"response" gorm:"type:text"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
-}
 
 type Provider struct {
 	ID            uint           `json:"id" gorm:"primaryKey"`

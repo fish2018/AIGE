@@ -44,7 +44,7 @@ export class AIService {
     
     try {
       const token = localStorage.getItem('token')
-      const baseURL = import.meta.env.VITE_API_BASE_URL || 'https://game.252035.xyz'
+      const baseURL = import.meta.env.VITE_API_BASE_URL
       
       //console.log('[AIService] 准备发送请求到:', `${baseURL}/api/admin/ai/chat`)
       

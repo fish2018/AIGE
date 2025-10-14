@@ -5,5 +5,5 @@ import (
 )
 
 func AutoMigrate() {
-	config.DB.AutoMigrate(&User{}, &ChatMessage{}, &Provider{}, &Model{}, &GameSave{}, &SystemConfig{})
+	config.DB.AutoMigrate(&User{}, &Provider{}, &Model{}, &GameSave{}, &SystemConfig{})
 }

@@ -1,6 +1,8 @@
 package game_engine
 
 import (
+	"AIGE/config"
+	"AIGE/models"
 	"AIGE/services"
 	"bufio"
 	"encoding/json"
@@ -8,6 +10,7 @@ import (
 	"io"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -16,9 +19,11 @@ type GameController struct {
 	modLoader          *ModLoader
 	stateManager       *StateManager
 	aiClient           *services.AIClient
-	compressionManager *CompressionManager // 新增
-	// AI配置（从数据库或配置文件加载）
-	defaultProvider AIProvider
+	compressionManager *CompressionManager
+	// AI配置内存缓存
+	gameProviders      map[string]AIProvider // modID -> AIProvider
+	defaultProvider    AIProvider
+	providerMutex      sync.RWMutex
 }
 
 // AIProvider 表示AI提供商配置
@@ -39,6 +44,7 @@ func NewGameController(modLoader *ModLoader, stateManager *StateManager) *GameCo
 		stateManager:       stateManager,
 		aiClient:           aiClient,
 		compressionManager: compressionManager,
+		gameProviders:      make(map[string]AIProvider),
 		// 默认配置，应该从数据库或环境变量加载
 		defaultProvider: AIProvider{
 			APIType: "openai",
@@ -47,6 +53,9 @@ func NewGameController(modLoader *ModLoader, stateManager *StateManager) *GameCo
 			ModelID: "gpt-4o-mini",
 		},
 	}
+	
+	// 加载所有游戏模型配置到内存
+	gc.LoadAllGameModelConfigs()
 	
 	// 设置压缩管理器的GameController引用
 	compressionManager.SetGameController(gc)
@@ -57,6 +66,125 @@ func NewGameController(modLoader *ModLoader, stateManager *StateManager) *GameCo
 // SetAIProvider 设置AI提供商配置
 func (gc *GameController) SetAIProvider(provider AIProvider) {
 	gc.defaultProvider = provider
+}
+
+// LoadAllGameModelConfigs 从数据库加载所有游戏模型配置到内存
+func (gc *GameController) LoadAllGameModelConfigs() {
+	gc.providerMutex.Lock()
+	defer gc.providerMutex.Unlock()
+	
+	db := config.DB
+	
+	// 加载默认模型配置
+	var defaultConfig models.SystemConfig
+	err := db.Where("key = ?", "game_model_id").First(&defaultConfig).Error
+	if err == nil && defaultConfig.Value != "" {
+		if provider := gc.loadProviderFromModelID(defaultConfig.Value); provider != nil {
+			gc.defaultProvider = *provider
+			fmt.Printf("[GameController] 加载默认模型配置：%s / %s\n", provider.APIType, provider.ModelID)
+		}
+	}
+	
+	// 加载游戏专用模型配置
+	var gameConfigs []models.SystemConfig
+	err = db.Where("key LIKE ?", "game_model_%").Find(&gameConfigs).Error
+	if err == nil {
+		for _, config := range gameConfigs {
+			if config.Key != "game_model_id" && config.Value != "" {
+				// 从 game_model_xiuxian2 提取 xiuxian2
+				if len(config.Key) > 11 { // "game_model_" 的长度是11
+					modID := config.Key[11:]
+					if provider := gc.loadProviderFromModelID(config.Value); provider != nil {
+						gc.gameProviders[modID] = *provider
+						fmt.Printf("[GameController] 加载游戏专用模型配置：%s -> %s / %s\n", modID, provider.APIType, provider.ModelID)
+					}
+				}
+			}
+		}
+	}
+	
+	fmt.Printf("[GameController] 游戏模型配置加载完成，默认模型：%s，专用配置：%d个\n", gc.defaultProvider.ModelID, len(gc.gameProviders))
+}
+
+// loadProviderFromModelID 根据模型ID从数据库加载完整的Provider配置
+func (gc *GameController) loadProviderFromModelID(modelID string) *AIProvider {
+	db := config.DB
+	var model models.Model
+	
+	if err := db.Preload("Provider").Where("id = ? AND enabled = ?", modelID, true).First(&model).Error; err != nil {
+		fmt.Printf("[GameController] 模型ID %s 不存在或未启用：%v\n", modelID, err)
+		return nil
+	}
+	
+	apiType := model.APIType
+	if apiType == "" {
+		apiType = model.Provider.Type
+	}
+	
+	baseURL := model.Provider.BaseURL
+	if baseURL == "" {
+		// 使用默认URL
+		switch apiType {
+		case "openai":
+			baseURL = "https://api.openai.com/v1/chat/completions"
+		case "anthropic":
+			baseURL = "https://api.anthropic.com/v1/messages"
+		case "google":
+			baseURL = "https://generativelanguage.googleapis.com/v1beta"
+		}
+	}
+	
+	return &AIProvider{
+		APIType: apiType,
+		BaseURL: baseURL,
+		APIKey:  model.Provider.APIKey,
+		ModelID: model.ModelID,
+	}
+}
+
+// UpdateGameModelConfig 更新指定游戏的模型配置（由管理员API调用）
+func (gc *GameController) UpdateGameModelConfig(modID string, modelID string) {
+	gc.providerMutex.Lock()
+	defer gc.providerMutex.Unlock()
+	
+	if modelID == "" {
+		// 删除游戏专用配置
+		delete(gc.gameProviders, modID)
+		fmt.Printf("[GameController] 删除游戏 %s 的专用模型配置\n", modID)
+	} else {
+		// 更新游戏专用配置
+		if provider := gc.loadProviderFromModelID(modelID); provider != nil {
+			gc.gameProviders[modID] = *provider
+			fmt.Printf("[GameController] 更新游戏 %s 的专用模型配置：%s / %s\n", modID, provider.APIType, provider.ModelID)
+		}
+	}
+}
+
+// UpdateDefaultModelConfig 更新默认模型配置（由管理员API调用）
+func (gc *GameController) UpdateDefaultModelConfig(modelID string) {
+	gc.providerMutex.Lock()
+	defer gc.providerMutex.Unlock()
+	
+	if provider := gc.loadProviderFromModelID(modelID); provider != nil {
+		gc.defaultProvider = *provider
+		fmt.Printf("[GameController] 更新默认模型配置：%s / %s\n", provider.APIType, provider.ModelID)
+	}
+}
+
+// GetProviderForMod 根据MOD ID获取对应的AI Provider配置
+func (gc *GameController) GetProviderForMod(modID string) AIProvider {
+	gc.providerMutex.RLock()
+	defer gc.providerMutex.RUnlock()
+	
+	// 优先使用游戏专用配置
+	if provider, exists := gc.gameProviders[modID]; exists {
+		fmt.Printf("[GameController] 使用游戏 %s 专用模型：%s / %s\n", modID, provider.APIType, provider.ModelID)
+		return provider
+	}
+	
+	// 使用默认配置
+	fmt.Printf("[GameController] 游戏 %s 使用默认模型：%s / %s\n", modID, gc.defaultProvider.APIType, gc.defaultProvider.ModelID)
+	return gc.defaultProvider
 }
 
 // InitializeGame initializes a new game session for a player or loads existing save
@@ -209,54 +337,90 @@ func (gc *GameController) ProcessAction(playerID, modID, action string) error {
 	return nil
 }
 
-// buildAIMessages builds AI messages using new compression system
-func (gc *GameController) buildAIMessages(session *GameSession, userPrompt string, mod *GameMod) []services.Message {
+// buildAIMessages builds AI messages using new compression system  
+func (gc *GameController) buildAIMessages(session *GameSession, gameState map[string]interface{}, mod *GameMod, currentUserAction string, specialPrompt ...string) []services.Message {
 	messages := []services.Message{}
 	
-	// 1. 动态加载最新系统提示词
-	messages = append(messages, services.Message{
-		Role:    "system",
-		Content: mod.Prompts["game_master"], // 始终使用最新版本
-	})
+	// 检查是否为游戏开始阶段（使用start_game prompt）
+	isGameStart := len(specialPrompt) > 0 && specialPrompt[0] != ""
 	
-	// 2. 添加压缩摘要（如果存在）
-	if session.CompressedSummary != "" {
-		fmt.Printf("[消息构建] 添加压缩摘要，长度: %d 字符\n", len(session.CompressedSummary))
+	if isGameStart {
+		// 游戏开始阶段：只使用start_game.txt作为系统提示词
 		messages = append(messages, services.Message{
 			Role:    "system",
-			Content: fmt.Sprintf("【历史摘要】%s", session.CompressedSummary),
+			Content: specialPrompt[0],
 		})
+		previewLen := 50
+		if len(specialPrompt[0]) < previewLen {
+			previewLen = len(specialPrompt[0])
+		}
+		fmt.Printf("[消息构建] 使用游戏开始提示词: %s\n", specialPrompt[0][:previewLen])
 	} else {
-		fmt.Printf("[消息构建] 无压缩摘要\n")
-	}
-	
-	// 3. 添加最近4条对话
-	fmt.Printf("[消息构建] 添加最近历史记录: %d 条\n", len(session.RecentHistory))
-	for _, msg := range session.RecentHistory {
+		// 正常游戏阶段：使用完整的消息结构
+		
+		// 1. 动态加载最新系统提示词
 		messages = append(messages, services.Message{
-			Role:    msg.Role,
-			Content: msg.Content,
+			Role:    "system",
+			Content: mod.Prompts["game_master"],
 		})
+		
+		// 2. 添加压缩摘要（如果存在）
+		if session.CompressedSummary != "" {
+			fmt.Printf("[消息构建] 添加压缩摘要，长度: %d 字符\n", len(session.CompressedSummary))
+			messages = append(messages, services.Message{
+				Role:    "system",
+				Content: fmt.Sprintf("【历史摘要】%s", session.CompressedSummary),
+			})
+		} else {
+			fmt.Printf("[消息构建] 无压缩摘要\n")
+		}
 	}
 	
-	// 4. 添加当前用户输入
-	messages = append(messages, services.Message{
-		Role:    "user",
-		Content: userPrompt,
-	})
+	// 4. 添加最近对话历史，确保assistant消息包含游戏状态
+	fmt.Printf("[消息构建] 添加最近历史记录: %d 条\n", len(session.RecentHistory))
+	for i, msg := range session.RecentHistory {
+		fmt.Printf("[消息构建] 历史记录[%d]: role=%s, content长度=%d\n", i, msg.Role, len(msg.Content))
+		// 如果是最后一条assistant消息且不是游戏开始阶段，需要附加当前游戏状态
+		if !isGameStart && i == len(session.RecentHistory)-1 && msg.Role == "assistant" && gameState != nil {
+			currentStateJSON, _ := json.Marshal(gameState)
+			content := msg.Content + fmt.Sprintf("\n\n【当前游戏状态】\n%s", string(currentStateJSON))
+			messages = append(messages, services.Message{
+				Role:    msg.Role,
+				Content: content,
+			})
+			fmt.Printf("[消息构建] 最后的assistant消息附加了游戏状态\n")
+		} else {
+			messages = append(messages, services.Message{
+				Role:    msg.Role,
+				Content: msg.Content,
+			})
+		}
+	}
 	
-	fmt.Printf("[消息构建] 总消息数: %d (系统提示词 + 摘要 + 历史记录 + 当前输入)\n", len(messages))
+	// 5. 添加当前用户动作
+	if currentUserAction != "" {
+		messages = append(messages, services.Message{
+			Role:    "user",
+			Content: currentUserAction,
+		})
+		fmt.Printf("[消息构建] 添加当前用户动作: %s\n", currentUserAction)
+	}
+	
+	fmt.Printf("[消息构建] 总消息数: %d\n", len(messages))
 	
 	return messages
 }
 
 // callAI calls the AI service
 func (gc *GameController) callAI(session *GameSession, prompt string, mod *GameMod) (string, error) {
-	// 使用新的消息构建方法
-	messages := gc.buildAIMessages(session, prompt, mod)
+	// 使用新的消息构建方法，游戏状态信息已包含在prompt中，不需要单独传递
+	messages := gc.buildAIMessages(session, nil, mod, "")
 
+	// 根据MOD获取对应的Provider配置
+	provider := gc.GetProviderForMod(mod.Config.GameID)
+	
 	// Check if AI provider is configured
-	if gc.defaultProvider.APIKey == "" {
+	if provider.APIKey == "" {
 		return "", fmt.Errorf("AI provider not configured - please set API key in admin panel")
 	}
 
@@ -264,33 +428,33 @@ func (gc *GameController) callAI(session *GameSession, prompt string, mod *GameM
 	var response interface{}
 	var err error
 
-	switch gc.defaultProvider.APIType {
+	switch provider.APIType {
 	case "openai":
 		response, err = gc.aiClient.CallOpenAI(
-			gc.defaultProvider.BaseURL,
-			gc.defaultProvider.APIKey,
-			gc.defaultProvider.ModelID,
+			provider.BaseURL,
+			provider.APIKey,
+			provider.ModelID,
 			messages,
 			false, // non-streaming for game logic
 		)
 	case "anthropic":
 		response, err = gc.aiClient.CallAnthropic(
-			gc.defaultProvider.BaseURL,
-			gc.defaultProvider.APIKey,
-			gc.defaultProvider.ModelID,
+			provider.BaseURL,
+			provider.APIKey,
+			provider.ModelID,
 			messages,
 			false,
 		)
 	case "google":
 		response, err = gc.aiClient.CallGoogle(
-			gc.defaultProvider.BaseURL,
-			gc.defaultProvider.APIKey,
-			gc.defaultProvider.ModelID,
+			provider.BaseURL,
+			provider.APIKey,
+			provider.ModelID,
 			messages,
 			false,
 		)
 	default:
-		return "", fmt.Errorf("unsupported API type: %s", gc.defaultProvider.APIType)
+		return "", fmt.Errorf("unsupported API type: %s", provider.APIType)
 	}
 
 	if err != nil {
@@ -617,13 +781,9 @@ func (gc *GameController) ProcessActionStream(playerID, modID, action string, st
 	gc.stateManager.SaveSession(session)
 
 	// Note: User action is already added to display_history by frontend for immediate display
-	// Only add to internal history for AI context
-	userMsg := Message{
-		Role:      "user",
-		Content:   action,
-		Timestamp: time.Now(),
-	}
-	session.RecentHistory = append(session.RecentHistory, userMsg)
+	// 当前用户消息不添加到历史记录，将在buildAIMessages中处理
+	// 历史记录只保存已完成的对话轮次
+	fmt.Printf("[ProcessActionStream] 当前用户动作: %s（不添加到历史记录）\n", action)
 
 	var prompt string
 
@@ -636,9 +796,9 @@ func (gc *GameController) ProcessActionStream(playerID, modID, action string, st
 		}
 		prompt = startPrompt
 	} else {
-		// Build regular AI prompt
-		currentStateJSON, _ := json.Marshal(session.State)
-		prompt = fmt.Sprintf("%s\n\n当前游戏状态：\n%s", action, string(currentStateJSON))
+		// 对于普通动作，不需要额外的prompt
+		// 用户消息已经在RecentHistory中，游戏状态会在buildAIMessages中作为系统消息添加
+		prompt = ""
 	}
 
 	// Call AI with streaming (with retry mechanism)
@@ -699,8 +859,8 @@ func (gc *GameController) ProcessActionStream(playerID, modID, action string, st
 
 // callAIStream calls AI service with streaming support
 func (gc *GameController) callAIStream(session *GameSession, prompt string, mod *GameMod, originalAction string, streamCallback StreamCallback, rollCallback RollEventCallback, secondStageCallback StreamCallback) error {
-	// 使用新的消息构建方法
-	messages := gc.buildAIMessages(session, prompt, mod)
+	// 使用新的消息构建方法，传递游戏状态、当前用户动作和特殊prompt（如果有）
+	messages := gc.buildAIMessages(session, session.State, mod, originalAction, prompt)
 
 	// 调试：打印发送给AI的消息
 	fmt.Printf("\n=== 发送给AI的消息 (%d条) ===\n", len(messages))
@@ -713,44 +873,47 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 	}
 	fmt.Printf("=== 消息结束 ===\n\n")
 
+	// 根据MOD获取对应的Provider配置
+	provider := gc.GetProviderForMod(mod.Config.GameID)
+	
 	// Check if AI provider is configured
-	if gc.defaultProvider.APIKey == "" {
+	if provider.APIKey == "" {
 		return fmt.Errorf("AI provider not configured")
 	}
 
-	fmt.Printf("使用AI提供商: %s, 模型: %s\n", gc.defaultProvider.APIType, gc.defaultProvider.ModelID)
+	fmt.Printf("使用AI提供商: %s, 模型: %s\n", provider.APIType, provider.ModelID)
 
 	// Call AI service with streaming
 	var response interface{}
 	var err error
 
-	switch gc.defaultProvider.APIType {
+	switch provider.APIType {
 	case "openai":
 		response, err = gc.aiClient.CallOpenAI(
-			gc.defaultProvider.BaseURL,
-			gc.defaultProvider.APIKey,
-			gc.defaultProvider.ModelID,
+			provider.BaseURL,
+			provider.APIKey,
+			provider.ModelID,
 			messages,
 			true, // streaming
 		)
 	case "anthropic":
 		response, err = gc.aiClient.CallAnthropic(
-			gc.defaultProvider.BaseURL,
-			gc.defaultProvider.APIKey,
-			gc.defaultProvider.ModelID,
+			provider.BaseURL,
+			provider.APIKey,
+			provider.ModelID,
 			messages,
 			true,
 		)
 	case "google":
 		response, err = gc.aiClient.CallGoogle(
-			gc.defaultProvider.BaseURL,
-			gc.defaultProvider.APIKey,
-			gc.defaultProvider.ModelID,
+			provider.BaseURL,
+			provider.APIKey,
+			provider.ModelID,
 			messages,
 			true,
 		)
 	default:
-		return fmt.Errorf("unsupported API type: %s", gc.defaultProvider.APIType)
+		return fmt.Errorf("unsupported API type: %s", provider.APIType)
 	}
 
 	if err != nil {
@@ -778,7 +941,7 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 			continue
 		}
 
-		chunk := gc.aiClient.ParseStreamChunk(gc.defaultProvider.APIType, line)
+		chunk := gc.aiClient.ParseStreamChunk(provider.APIType, line)
 		if chunk != nil {
 			if content, ok := chunk["content"].(string); ok && content != "" {
 				fullResponse.WriteString(content)
@@ -855,14 +1018,15 @@ func (gc *GameController) callAIStream(session *GameSession, prompt string, mod 
 		Timestamp: time.Now(),
 	}
 	
-	// 获取最后一条用户消息
-	var lastUserMsg Message
-	if len(session.RecentHistory) > 0 {
-		lastUserMsg = session.RecentHistory[len(session.RecentHistory)-1]
+	// 创建当前用户消息
+	currentUserMsg := Message{
+		Role:      "user",
+		Content:   originalAction,
+		Timestamp: time.Now(),
 	}
 	
 	// 处理对话历史压缩
-	gc.compressionManager.ProcessNewMessage(session, lastUserMsg, aiMsg)
+	gc.compressionManager.ProcessNewMessage(session, currentUserMsg, aiMsg)
 
 	// Check if this is a roll request (two-stage judgment)
 	if rollRequest, hasRoll := parsed["roll_request"].(map[string]interface{}); hasRoll {
@@ -1034,11 +1198,14 @@ func filterDuplicateContent(secondNarrative, firstNarrative string) string {
 
 // callAIStreamSecondStage calls AI service for second stage with streaming support
 func (gc *GameController) callAIStreamSecondStage(session *GameSession, prompt string, mod *GameMod, firstNarrative string, secondStageCallback StreamCallback) error {
-	// Build messages from session history (which already contains system prompt)
-	messages := gc.buildAIMessages(session, prompt, mod)
+	// Build messages from session history (which already contains system prompt)  
+	messages := gc.buildAIMessages(session, session.State, mod, "", prompt)
 
+	// 根据MOD获取对应的Provider配置
+	provider := gc.GetProviderForMod(mod.Config.GameID)
+	
 	// Check if AI provider is configured
-	if gc.defaultProvider.APIKey == "" {
+	if provider.APIKey == "" {
 		return fmt.Errorf("AI provider not configured")
 	}
 
@@ -1046,33 +1213,33 @@ func (gc *GameController) callAIStreamSecondStage(session *GameSession, prompt s
 	var response interface{}
 	var err error
 
-	switch gc.defaultProvider.APIType {
+	switch provider.APIType {
 	case "openai":
 		response, err = gc.aiClient.CallOpenAI(
-			gc.defaultProvider.BaseURL,
-			gc.defaultProvider.APIKey,
-			gc.defaultProvider.ModelID,
+			provider.BaseURL,
+			provider.APIKey,
+			provider.ModelID,
 			messages,
 			true, // streaming
 		)
 	case "anthropic":
 		response, err = gc.aiClient.CallAnthropic(
-			gc.defaultProvider.BaseURL,
-			gc.defaultProvider.APIKey,
-			gc.defaultProvider.ModelID,
+			provider.BaseURL,
+			provider.APIKey,
+			provider.ModelID,
 			messages,
 			true,
 		)
 	case "google":
 		response, err = gc.aiClient.CallGoogle(
-			gc.defaultProvider.BaseURL,
-			gc.defaultProvider.APIKey,
-			gc.defaultProvider.ModelID,
+			provider.BaseURL,
+			provider.APIKey,
+			provider.ModelID,
 			messages,
 			true,
 		)
 	default:
-		return fmt.Errorf("unsupported API type: %s", gc.defaultProvider.APIType)
+		return fmt.Errorf("unsupported API type: %s", provider.APIType)
 	}
 
 	if err != nil {
@@ -1099,7 +1266,7 @@ func (gc *GameController) callAIStreamSecondStage(session *GameSession, prompt s
 			continue
 		}
 
-		chunk := gc.aiClient.ParseStreamChunk(gc.defaultProvider.APIType, line)
+		chunk := gc.aiClient.ParseStreamChunk(provider.APIType, line)
 		if chunk != nil {
 			if content, ok := chunk["content"].(string); ok && content != "" {
 				fullResponse.WriteString(content)

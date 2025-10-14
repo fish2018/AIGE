@@ -98,7 +98,7 @@ func DeleteModel(c *gin.Context) {
 		return
 	}
 
-	if err := config.DB.Delete(&model).Error; err != nil {
+	if err := config.DB.Unscoped().Delete(&model).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete model"})
 		return
 	}

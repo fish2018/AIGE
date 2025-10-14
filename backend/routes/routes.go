@@ -22,10 +22,6 @@ func SetupRoutes(r *gin.Engine) {
 		// 用户相关
 		api.GET("/profile", controllers.GetProfile)
 		
-		// AI对话相关
-		api.POST("/chat", controllers.SendMessage)
-		api.GET("/chat/history", controllers.GetChatHistory)
-
 		// 游戏相关
 		api.GET("/game/mods", controllers.GetAvailableMods)
 		api.POST("/game/init", controllers.InitializeGame)

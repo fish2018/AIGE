@@ -112,8 +112,8 @@ func DeleteUser(c *gin.Context) {
 		return
 	}
 
-	// 删除用户
-	if err := config.DB.Delete(&user).Error; err != nil {
+	// 删除用户（物理删除）
+	if err := config.DB.Unscoped().Delete(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "用户删除失败"})
 		return
 	}

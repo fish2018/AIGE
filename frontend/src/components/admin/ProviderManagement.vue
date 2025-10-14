@@ -12,16 +12,39 @@
       <div class="config-content">
         <el-form label-width="120px">
           <el-form-item label="默认模型">
-            <el-select v-model="gameConfig.defaultModelId" placeholder="选择默认AI模型" style="width: 100%;">
-              <el-option label="自动选择第一个启用的模型" value="" />
-              <el-option
-                v-for="model in allEnabledModels"
-                :key="model.id"
-                :label="`${model.provider.name} / ${model.name}`"
-                :value="String(model.id)"
-              />
-            </el-select>
-            <div style="font-size: 12px; color: #909399; margin-top: 4px;">未指定游戏模型时使用此模型</div>
+            <div class="default-model-selectors">
+              <el-select 
+                v-model="defaultSelectedProviderId" 
+                placeholder="选择提供商" 
+                @change="onDefaultProviderChange"
+                size="small"
+                style="width: 150px"
+              >
+                <el-option
+                  v-for="provider in enabledProviders"
+                  :key="provider.id"
+                  :label="provider.name"
+                  :value="provider.id"
+                />
+              </el-select>
+              
+              <el-select 
+                v-model="defaultSelectedModelId" 
+                placeholder="选择模型"
+                :disabled="!defaultSelectedProviderId"
+                @change="onDefaultModelChange"
+                size="small"
+                style="width: 200px"
+              >
+                <el-option
+                  v-for="model in defaultAvailableModels"
+                  :key="model.id"
+                  :label="model.name"
+                  :value="model.model_id"
+                />
+              </el-select>
+              
+            </div>
           </el-form-item>
           
           <el-form-item label="游戏专用模型">
@@ -31,21 +54,41 @@
                   <span class="game-name">{{ mod.name }}</span>
                   <el-tag size="small" type="info">{{ mod.game_id }}</el-tag>
                 </div>
-                <el-select 
-                  v-model="gameConfig.gameModels[mod.game_id]" 
-                  placeholder="使用默认模型"
-                  clearable
-                  style="flex: 1; margin-left: 12px;"
-                >
-                  <el-option label="使用默认模型" value="" />
-                  <el-option
-                    v-for="model in allEnabledModels"
-                    :key="model.id"
-                    :label="`${model.provider.name} / ${model.name}`"
-                    :value="String(model.id)"
-                  />
-                </el-select>
+                
+                <div class="model-selectors">
+                  <el-select 
+                    v-model="gameProviderSelections[mod.game_id]" 
+                    placeholder="选择提供商" 
+                    @change="() => onGameProviderChange(mod.game_id)"
+                    size="small"
+                    style="width: 150px"
+                  >
+                    <el-option
+                      v-for="provider in enabledProviders"
+                      :key="provider.id"
+                      :label="provider.name"
+                      :value="provider.id"
+                    />
+                  </el-select>
+                  
+                  <el-select 
+                    v-model="gameModelSelections[mod.game_id]"
+                    placeholder="选择模型"
+                    :disabled="!gameProviderSelections[mod.game_id]"
+                    @change="() => onGameModelChange(mod.game_id)"
+                    size="small"
+                    style="width: 200px"
+                  >
+                    <el-option
+                      v-for="model in getGameAvailableModels(mod.game_id)"
+                      :key="model.id"
+                      :label="model.name"
+                      :value="model.model_id"
+                    />
+                  </el-select>
+                </div>
               </div>
+              
               <div v-if="!availableMods || availableMods.length === 0" class="no-games">
                 暂无可用游戏
               </div>
@@ -263,6 +306,7 @@
       </template>
     </el-dialog>
 
+
     <!-- 添加/编辑模型对话框 -->
     <el-dialog
       v-model="showModelDialog"
@@ -338,7 +382,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick, reactive, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Delete, Setting, SuccessFilled, Search, Refresh } from '@element-plus/icons-vue'
 import { useAdminStore } from '@/stores/admin'
@@ -364,7 +408,7 @@ const testingModelId = ref<number | null>(null)
 
 // 游戏配置相关
 const availableMods = ref<any[]>([])
-const gameConfig = ref<{
+const gameConfig = reactive<{
   defaultModelId: string
   gameModels: Record<string, string>
 }>({
@@ -372,6 +416,19 @@ const gameConfig = ref<{
   gameModels: {}
 })
 const savingGameConfig = ref(false)
+
+// 游戏模型选择相关 - 完全参考操练场的简洁实现
+const defaultSelectedProviderId = ref<number | null>(null)
+const defaultSelectedModelId = ref<string>('')
+
+// 每个游戏的选择状态 - 参考操练场
+const gameProviderSelections = reactive<Record<string, number | null>>({})
+const gameModelSelections = reactive<Record<string, string>>({})
+
+// 启用的提供商列表 - 参考操练场
+const enabledProviders = computed(() => {
+  return providers.value.filter(p => p.enabled)
+})
 
 // 所有启用的模型（扁平化列表）
 const allEnabledModels = computed(() => {
@@ -390,6 +447,23 @@ const allEnabledModels = computed(() => {
   }
   return models
 })
+
+// 默认模型的可用模型列表 - 参考操练场
+const defaultAvailableModels = computed(() => {
+  if (!defaultSelectedProviderId.value) return []
+  return allEnabledModels.value.filter(m => 
+    m.provider_id === defaultSelectedProviderId.value
+  )
+})
+
+// 游戏的可用模型列表 - 参考操练场
+const getGameAvailableModels = (gameId: string) => {
+  const providerId = gameProviderSelections[gameId]
+  if (!providerId) return []
+  return allEnabledModels.value.filter(m => 
+    m.provider_id === providerId
+  )
+}
 
 const providerForm = ref({
   type: 'openai' as 'openai' | 'anthropic' | 'google' | 'custom',
@@ -726,6 +800,12 @@ const loadAvailableMods = async () => {
     })
     if (response.ok) {
       availableMods.value = await response.json()
+      // 确保所有游戏都有对应的配置槽位
+      for (const mod of availableMods.value) {
+        if (!(mod.game_id in gameConfig.gameModels)) {
+          gameConfig.gameModels[mod.game_id] = ''
+        }
+      }
     }
   } catch (error) {
     console.error('加载游戏列表失败:', error)
@@ -742,8 +822,19 @@ const loadGameConfig = async () => {
     })
     if (response.ok) {
       const data = await response.json()
-      gameConfig.value.defaultModelId = data.default_model_id || ''
-      gameConfig.value.gameModels = data.game_models || {}
+      gameConfig.defaultModelId = String(data.default_model_id || '')
+      // 确保响应性更新 - 将所有值转换为字符串以匹配el-option的value类型
+      const processedGameModels: Record<string, string> = {}
+      if (data.game_models) {
+        for (const [gameId, modelId] of Object.entries(data.game_models)) {
+          processedGameModels[gameId] = String(modelId || '')
+        }
+      }
+      gameConfig.gameModels = processedGameModels
+      console.log('游戏配置加载完成')
+      
+      // 同步到操练场风格的变量
+      initializeSelections()
     }
   } catch (error) {
     console.error('加载游戏配置失败:', error)
@@ -761,8 +852,8 @@ const saveGameConfig = async () => {
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       },
       body: JSON.stringify({
-        default_model_id: gameConfig.value.defaultModelId,
-        game_models: gameConfig.value.gameModels
+        default_model_id: gameConfig.defaultModelId,
+        game_models: gameConfig.gameModels
       })
     })
     
@@ -779,10 +870,82 @@ const saveGameConfig = async () => {
   }
 }
 
-onMounted(() => {
-  loadProviders()
-  loadAvailableMods()
-  loadGameConfig()
+// 事件处理方法 - 完全参考操练场的简洁实现
+
+// 默认提供商变化处理 - 参考操练场的 onProviderChange
+const onDefaultProviderChange = () => {
+  defaultSelectedModelId.value = ''
+  syncDefaultConfigToStorage()
+}
+
+// 默认模型变化处理
+const onDefaultModelChange = () => {
+  syncDefaultConfigToStorage()
+}
+
+// 游戏提供商变化处理 - 参考操练场的 onProviderChange
+const onGameProviderChange = (gameId: string) => {
+  gameModelSelections[gameId] = ''
+  syncGameConfigToStorage(gameId)
+}
+
+// 游戏模型变化处理
+const onGameModelChange = (gameId: string) => {
+  syncGameConfigToStorage(gameId)
+}
+
+
+// 同步默认配置到存储
+const syncDefaultConfigToStorage = () => {
+  // 找到对应的模型ID
+  if (defaultSelectedModelId.value) {
+    const model = defaultAvailableModels.value.find(m => m.model_id === defaultSelectedModelId.value)
+    gameConfig.defaultModelId = model ? String(model.id) : ''
+  } else {
+    gameConfig.defaultModelId = ''
+  }
+}
+
+// 同步游戏配置到存储
+const syncGameConfigToStorage = (gameId: string) => {
+  // 找到对应的模型ID
+  if (gameModelSelections[gameId]) {
+    const models = getGameAvailableModels(gameId)
+    const model = models.find(m => m.model_id === gameModelSelections[gameId])
+    gameConfig.gameModels[gameId] = model ? String(model.id) : ''
+  } else {
+    gameConfig.gameModels[gameId] = ''
+  }
+}
+
+// 初始化选择状态 - 从 gameConfig 恢复到操练场风格的变量
+const initializeSelections = () => {
+  // 初始化默认模型选择
+  if (gameConfig.defaultModelId) {
+    const model = allEnabledModels.value.find(m => String(m.id) === gameConfig.defaultModelId)
+    if (model) {
+      defaultSelectedProviderId.value = model.provider_id
+      defaultSelectedModelId.value = model.model_id
+    }
+  }
+  
+  // 初始化游戏模型选择
+  for (const [gameId, modelId] of Object.entries(gameConfig.gameModels)) {
+    if (modelId) {
+      const model = allEnabledModels.value.find(m => String(m.id) === modelId)
+      if (model) {
+        gameProviderSelections[gameId] = model.provider_id
+        gameModelSelections[gameId] = model.model_id
+      }
+    }
+  }
+}
+
+
+onMounted(async () => {
+  await loadProviders()  // 确保先加载提供商和模型
+  await loadGameConfig()  // 然后加载配置
+  await loadAvailableMods() // 最后加载MOD并初始化空槽位
 })
 </script>
 
@@ -1058,6 +1221,8 @@ code {
   background: white;
   border-radius: 4px;
   border: 1px solid #e4e7ed;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .game-info {
@@ -1077,5 +1242,46 @@ code {
   color: #909399;
   padding: 16px;
   font-size: 14px;
+}
+
+
+/* 默认模型选择器样式 */
+.default-model-selectors {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #fafbfc;
+  border-radius: 6px;
+  border: 1px solid #e4e7ed;
+}
+
+/* 游戏模型选择器样式 */
+.game-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.game-model-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e4e7ed;
+  gap: 16px;
+}
+
+.game-model-item:hover {
+  border-color: #409eff;
+  background: #fafbfc;
+}
+
+.model-selectors {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
 }
 </style>
