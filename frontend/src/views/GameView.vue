@@ -66,16 +66,16 @@
       <!-- 移动端菜单 -->
       <div v-if="showMobileMenu" class="mobile-menu-overlay" @click="closeMobileMenu">
         <div class="mobile-menu" @click.stop>
-          <button @click="saveGame; closeMobileMenu()" :disabled="isSaving">
+          <button @click="handleMobileSave" :disabled="isSaving">
             {{ isSaving ? '存档中...' : '💾 手动存档' }}
           </button>
-          <button @click="showRestartConfirm(); closeMobileMenu()">
+          <button @click="handleMobileRestart">
             🔄 重启机缘
           </button>
-          <button @click="switchGame; closeMobileMenu()">
+          <button @click="handleMobileSwitchGame">
             🎮 切换游戏
           </button>
-          <button @click="logout; closeMobileMenu()">
+          <button @click="handleMobileLogout">
             🚪 退出
           </button>
         </div>
@@ -790,6 +790,27 @@ function toggleMobileMenu() {
 
 function closeMobileMenu() {
   showMobileMenu.value = false
+}
+
+// 移动端按钮事件处理方法
+function handleMobileSave() {
+  saveGame()
+  closeMobileMenu()
+}
+
+function handleMobileRestart() {
+  showRestartConfirm()
+  closeMobileMenu()
+}
+
+function handleMobileSwitchGame() {
+  switchGame()
+  closeMobileMenu()
+}
+
+function handleMobileLogout() {
+  logout()
+  closeMobileMenu()
 }
 
 // 切换游戏
