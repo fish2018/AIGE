@@ -1,12 +1,8 @@
 <template>
   <div class="admin-container">
     <el-container style="height: 100vh">
-      <!-- 左侧栏 -->
-      <el-aside width="250px" class="admin-sidebar">
-        <div class="logo">
-          <h3>管理后台</h3>
-        </div>
-        
+      <!-- PC端左侧栏 -->
+      <el-aside width="250px" class="admin-sidebar pc-sidebar">
         <el-menu
           :default-active="activeMenu"
           class="admin-menu"
@@ -46,19 +42,54 @@
         <!-- 顶部导航 -->
         <el-header class="admin-header">
           <div class="header-content">
+            <!-- 移动端菜单按钮 -->
+            <div class="mobile-menu-btn">
+              <el-button 
+                type="text" 
+                @click="toggleMobileMenu"
+                class="menu-toggle"
+                size="large"
+              >
+                <el-icon size="20"><Menu /></el-icon>
+              </el-button>
+            </div>
+            
             <div class="breadcrumb">
-              <el-breadcrumb separator="/">
+              <el-breadcrumb separator="/" class="pc-breadcrumb">
                 <el-breadcrumb-item>管理后台</el-breadcrumb-item>
                 <el-breadcrumb-item>{{ getCurrentPageTitle() }}</el-breadcrumb-item>
               </el-breadcrumb>
+              <!-- 移动端简化标题 -->
+              <h3 class="mobile-title">{{ getCurrentPageTitle() }}</h3>
             </div>
+            
             <div class="user-info">
-              <el-dropdown>
+              <!-- PC端用户信息 -->
+              <el-dropdown class="pc-user-dropdown">
                 <span class="el-dropdown-link">
                   <el-icon><UserFilled /></el-icon>
                   {{ authStore.user?.username }}
                   <el-icon class="el-icon--right"><arrow-down /></el-icon>
                 </span>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item @click="goToChat">
+                      <el-icon><ChatDotRound /></el-icon>
+                      返回主页
+                    </el-dropdown-item>
+                    <el-dropdown-item divided @click="logout">
+                      <el-icon><SwitchButton /></el-icon>
+                      退出登录
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+              
+              <!-- 移动端用户菜单 -->
+              <el-dropdown class="mobile-user-dropdown">
+                <el-button type="text" size="large">
+                  <el-icon size="20"><UserFilled /></el-icon>
+                </el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item @click="goToChat">
@@ -81,7 +112,7 @@
           <!-- 概览页面 -->
           <div v-if="activeMenu === 'overview'" class="overview-content">
             <el-row :gutter="20">
-              <el-col :span="6">
+              <el-col :xs="12" :sm="12" :md="6" :lg="6" :xl="6">
                 <el-card class="stats-card">
                   <div class="stats-item">
                     <div class="stats-number">{{ totalUsers }}</div>
@@ -89,7 +120,7 @@
                   </div>
                 </el-card>
               </el-col>
-              <el-col :span="6">
+              <el-col :xs="12" :sm="12" :md="6" :lg="6" :xl="6">
                 <el-card class="stats-card">
                   <div class="stats-item">
                     <div class="stats-number">{{ adminUsers }}</div>
@@ -97,7 +128,7 @@
                   </div>
                 </el-card>
               </el-col>
-              <el-col :span="6">
+              <el-col :xs="12" :sm="12" :md="6" :lg="6" :xl="6">
                 <el-card class="stats-card">
                   <div class="stats-item">
                     <div class="stats-number">{{ totalChats }}</div>
@@ -105,7 +136,7 @@
                   </div>
                 </el-card>
               </el-col>
-              <el-col :span="6">
+              <el-col :xs="12" :sm="12" :md="6" :lg="6" :xl="6">
                 <el-card class="stats-card">
                   <div class="stats-item">
                     <div class="stats-number">Online</div>
@@ -129,44 +160,100 @@
                 </div>
               </template>
 
-              <el-table :data="users" style="width: 100%" v-loading="loading">
-                <el-table-column prop="id" label="ID" width="80" />
-                <el-table-column prop="username" label="用户名" />
-                <el-table-column prop="email" label="邮箱" />
-                <el-table-column prop="is_admin" label="管理员" width="100">
-                  <template #default="scope">
-                    <el-tag :type="scope.row.is_admin ? 'success' : 'info'">
-                      {{ scope.row.is_admin ? '是' : '否' }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="300">
-                  <template #default="scope">
+              <!-- PC端表格显示 -->
+              <div class="table-container pc-table">
+                <el-table :data="users" style="width: 100%" v-loading="loading" class="responsive-table">
+                  <el-table-column prop="id" label="ID" width="80" />
+                  <el-table-column prop="username" label="用户名" min-width="120" />
+                  <el-table-column prop="email" label="邮箱" min-width="180" />
+                  <el-table-column prop="is_admin" label="管理员" width="100">
+                    <template #default="scope">
+                      <el-tag :type="scope.row.is_admin ? 'success' : 'info'" size="small">
+                        {{ scope.row.is_admin ? '是' : '否' }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" min-width="200">
+                    <template #default="scope">
+                      <div class="action-buttons">
+                        <el-button
+                          size="small"
+                          @click="showPasswordDialog(scope.row)"
+                        >
+                          密码
+                        </el-button>
+                        <el-button
+                          size="small"
+                          type="warning"
+                          @click="toggleAdmin(scope.row)"
+                          :disabled="scope.row.id === authStore.user?.id"
+                        >
+                          {{ scope.row.is_admin ? '取消' : '设置' }}
+                        </el-button>
+                        <el-button
+                          size="small"
+                          type="danger"
+                          @click="deleteUser(scope.row)"
+                          :disabled="scope.row.id === authStore.user?.id"
+                        >
+                          删除
+                        </el-button>
+                      </div>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+              
+              <!-- 移动端卡片列表显示 -->
+              <div class="mobile-user-list" v-loading="loading">
+                <div class="mobile-user-card" v-for="user in users" :key="user.id">
+                  <div class="user-info">
+                    <div class="user-header">
+                      <span class="username">{{ user.username }}</span>
+                      <el-tag :type="user.is_admin ? 'success' : 'info'" size="small">
+                        {{ user.is_admin ? '管理员' : '普通用户' }}
+                      </el-tag>
+                    </div>
+                    <div class="user-detail">
+                      <div class="detail-item">
+                        <span class="detail-label">ID:</span>
+                        <span class="detail-value">{{ user.id }}</span>
+                      </div>
+                      <div class="detail-item">
+                        <span class="detail-label">邮箱:</span>
+                        <span class="detail-value">{{ user.email || '未设置' }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="user-actions">
                     <el-button
                       size="small"
-                      @click="showPasswordDialog(scope.row)"
+                      @click="showPasswordDialog(user)"
+                      class="mobile-action-btn"
                     >
-                      修改密码
+                      <el-icon><Key /></el-icon>
                     </el-button>
                     <el-button
                       size="small"
                       type="warning"
-                      @click="toggleAdmin(scope.row)"
-                      :disabled="scope.row.id === authStore.user?.id"
+                      @click="toggleAdmin(user)"
+                      :disabled="user.id === authStore.user?.id"
+                      class="mobile-action-btn"
                     >
-                      {{ scope.row.is_admin ? '取消管理员' : '设为管理员' }}
+                      <el-icon><UserFilled /></el-icon>
                     </el-button>
                     <el-button
                       size="small"
                       type="danger"
-                      @click="deleteUser(scope.row)"
-                      :disabled="scope.row.id === authStore.user?.id"
+                      @click="deleteUser(user)"
+                      :disabled="user.id === authStore.user?.id"
+                      class="mobile-action-btn"
                     >
-                      删除
+                      <el-icon><Delete /></el-icon>
                     </el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
+                  </div>
+                </div>
+              </div>
             </el-card>
           </div>
 
@@ -186,7 +273,7 @@
               <template #header>
                 <span>系统设置</span>
               </template>
-              <el-form label-width="120px">
+              <el-form label-width="120px" class="system-form">
                 <el-form-item label="系统名称">
                   <el-input v-model="systemSettings.siteName" placeholder="AI Chat System" />
                 </el-form-item>
@@ -201,8 +288,8 @@
                 <el-form-item label="允许注册">
                   <el-switch v-model="systemSettings.allowRegister" />
                 </el-form-item>
-                <el-form-item>
-                  <el-button type="primary" @click="saveSystemSettings">保存设置</el-button>
+                <el-form-item class="form-actions">
+                  <el-button type="primary" @click="saveSystemSettings" class="save-btn">保存设置</el-button>
                 </el-form-item>
               </el-form>
             </el-card>
@@ -210,6 +297,51 @@
         </el-main>
       </el-container>
     </el-container>
+
+    <!-- 移动端侧边栏抽屉 -->
+    <el-drawer
+      v-model="mobileMenuVisible"
+      direction="ltr"
+      size="280px"
+      :with-header="false"
+      class="mobile-menu-drawer"
+    >
+      <div class="mobile-sidebar">
+        <el-menu
+          :default-active="activeMenu"
+          class="mobile-admin-menu"
+          background-color="#001529"
+          text-color="#ffffff"
+          active-text-color="#1890ff"
+          @select="handleMobileMenuSelect"
+        >
+          <el-menu-item index="overview">
+            <el-icon><House /></el-icon>
+            <span>概览</span>
+          </el-menu-item>
+          
+          <el-menu-item index="users">
+            <el-icon><UserIcon /></el-icon>
+            <span>用户管理</span>
+          </el-menu-item>
+
+          <el-menu-item index="providers">
+            <el-icon><Connection /></el-icon>
+            <span>提供商管理</span>
+          </el-menu-item>
+
+          <el-menu-item index="playground">
+            <el-icon><ChatDotRound /></el-icon>
+            <span>操练场</span>
+          </el-menu-item>
+          
+          <el-menu-item index="system">
+            <el-icon><Setting /></el-icon>
+            <span>系统设置</span>
+          </el-menu-item>
+        </el-menu>
+      </div>
+    </el-drawer>
 
     <!-- 修改密码对话框 -->
     <el-dialog
@@ -271,7 +403,10 @@ import {
   ChatDotRound,
   SwitchButton,
   Refresh,
-  Connection
+  Connection,
+  Menu,
+  Key,
+  Delete
 } from '@element-plus/icons-vue'
 import ProviderManagement from '@/components/admin/ProviderManagement.vue'
 import Playground from '@/components/admin/Playground.vue'
@@ -287,6 +422,9 @@ const passwordLoading = ref(false)
 const selectedUser = ref<User | null>(null)
 const passwordFormRef = ref<FormInstance>()
 const activeMenu = ref('overview')
+
+// 移动端状态
+const mobileMenuVisible = ref(false)
 
 // 统计数据
 const totalUsers = computed(() => users.value.length)
@@ -334,6 +472,19 @@ onMounted(() => {
 
 const handleMenuSelect = (index: string) => {
   activeMenu.value = index
+  if (index === 'users') {
+    loadUsers()
+  }
+}
+
+// 移动端菜单相关方法
+const toggleMobileMenu = () => {
+  mobileMenuVisible.value = !mobileMenuVisible.value
+}
+
+const handleMobileMenuSelect = (index: string) => {
+  activeMenu.value = index
+  mobileMenuVisible.value = false // 选择后关闭菜单
   if (index === 'users') {
     loadUsers()
   }
@@ -458,27 +609,14 @@ const saveSystemSettings = () => {
 .admin-sidebar {
   background: #001529;
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
 }
 
-.logo {
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.1);
-  margin-bottom: 20px;
-}
-
-.logo h3 {
-  color: #fff;
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-}
 
 .admin-menu {
   border: none;
-  height: calc(100vh - 84px);
+  height: 100vh;
+  padding-top: 20px;
 }
 
 .admin-menu .el-menu-item {
@@ -577,5 +715,364 @@ const saveSystemSettings = () => {
 
 :deep(.el-breadcrumb__inner.is-link) {
   color: #1890ff;
+}
+
+/* ============ 管理后台移动端适配 (1024px以下) ============ */
+@media (max-width: 1024px) {
+  /* 隐藏PC端元素 */
+  .pc-sidebar {
+    display: none !important;
+  }
+  
+  .pc-breadcrumb {
+    display: none;
+  }
+  
+  .pc-user-dropdown {
+    display: none;
+  }
+  
+  .pc-table {
+    display: none;
+  }
+  
+  /* 显示移动端元素 */
+  .mobile-menu-btn {
+    display: block;
+  }
+  
+  .mobile-title {
+    display: block;
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+  }
+  
+  .mobile-user-dropdown {
+    display: block;
+  }
+  
+  .mobile-user-list {
+    display: block;
+  }
+  
+  /* 修复容器布局 */
+  .admin-container {
+    overflow-x: hidden;
+  }
+  
+  /* 头部布局调整 */
+  .admin-header {
+    padding: 0 16px;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  
+  .header-content {
+    height: 100%;
+  }
+  
+  .breadcrumb {
+    flex: 1;
+    text-align: center;
+  }
+  
+  /* 主内容区调整 */
+  .admin-main {
+    padding: 16px;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+  
+  /* 概览卡片调整 */
+  .overview-content :deep(.el-row) {
+    margin: 0 !important;
+  }
+  
+  .overview-content :deep(.el-col) {
+    margin-bottom: 16px;
+    padding: 0 8px !important;
+  }
+  
+  /* 移动端用户卡片 */
+  .mobile-user-card {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    margin-bottom: 12px;
+    padding: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .user-info {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .user-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  
+  .username {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .user-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .detail-item {
+    display: flex;
+    font-size: 14px;
+  }
+  
+  .detail-label {
+    color: #666;
+    width: 40px;
+    flex-shrink: 0;
+  }
+  
+  .detail-value {
+    color: #333;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .user-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-left: 16px;
+    flex-shrink: 0;
+  }
+  
+  .mobile-action-btn {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* 表单移动端优化 */
+  .system-form {
+    width: 100%;
+  }
+  
+  .system-form :deep(.el-form-item__label) {
+    font-size: 14px;
+    width: 100px !important;
+  }
+  
+  .system-form :deep(.el-input__wrapper) {
+    padding: 10px 12px;
+  }
+  
+  .form-actions {
+    text-align: center;
+  }
+  
+  .save-btn {
+    width: 100%;
+    height: 44px;
+    font-size: 16px;
+  }
+  
+  /* 卡片优化 */
+  :deep(.el-card) {
+    margin-bottom: 16px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  
+  :deep(.el-card__header) {
+    padding: 16px;
+    font-size: 16px;
+  }
+  
+  :deep(.el-card__body) {
+    padding: 16px;
+    overflow-x: hidden;
+  }
+  
+  /* 对话框优化 */
+  :deep(.el-dialog) {
+    width: 90% !important;
+    margin: 5vh auto;
+  }
+  
+  :deep(.el-dialog__header) {
+    padding: 16px 16px 0;
+  }
+  
+  :deep(.el-dialog__body) {
+    padding: 16px;
+  }
+  
+  :deep(.el-dialog__footer) {
+    padding: 0 16px 16px;
+  }
+}
+
+/* PC端样式 (1025px以上) */
+@media (min-width: 1025px) {
+  /* 隐藏移动端元素 */
+  .mobile-menu-btn {
+    display: none;
+  }
+  
+  .mobile-title {
+    display: none;
+  }
+  
+  .mobile-user-dropdown {
+    display: none;
+  }
+  
+  .mobile-user-list {
+    display: none;
+  }
+  
+  /* 显示PC端元素 */
+  .pc-sidebar {
+    display: flex !important;
+  }
+  
+  .pc-breadcrumb {
+    display: block;
+  }
+  
+  .pc-user-dropdown {
+    display: block;
+  }
+  
+  .pc-table {
+    display: block;
+  }
+}
+
+/* 移动端抽屉样式 */
+.mobile-menu-drawer {
+  z-index: 2000;
+}
+
+.mobile-menu-drawer :deep(.el-drawer__body) {
+  padding: 0;
+  background: #001529;
+  overflow: hidden;
+}
+
+.mobile-sidebar {
+  height: 100%;
+  background: #001529;
+}
+
+
+.mobile-admin-menu {
+  border: none;
+  height: 100vh;
+  padding-top: 20px;
+}
+
+.mobile-admin-menu .el-menu-item {
+  height: 56px;
+  line-height: 56px;
+}
+
+.mobile-admin-menu .el-menu-item:hover {
+  background-color: rgba(24, 144, 255, 0.1);
+}
+
+/* 小屏幕进一步优化 (480px以下) */
+@media (max-width: 480px) {
+  .admin-header {
+    padding: 0 12px;
+    height: 48px;
+  }
+  
+  .mobile-title {
+    font-size: 16px;
+  }
+  
+  .admin-main {
+    padding: 12px;
+  }
+  
+  .overview-content :deep(.el-col) {
+    padding: 0 4px !important;
+  }
+  
+  .stats-number {
+    font-size: 24px !important;
+  }
+  
+  .stats-item {
+    padding: 16px 0 !important;
+  }
+  
+  /* 移动端用户卡片小屏优化 */
+  .mobile-user-card {
+    padding: 12px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .user-actions {
+    flex-direction: row;
+    margin-left: 0;
+    margin-top: 12px;
+    width: 100%;
+    justify-content: space-around;
+  }
+  
+  .mobile-action-btn {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .username {
+    font-size: 15px;
+  }
+  
+  .detail-item {
+    font-size: 13px;
+  }
+  
+  .system-form :deep(.el-form-item__label) {
+    width: 80px !important;
+    font-size: 13px;
+  }
+  
+  :deep(.el-card__header) {
+    padding: 12px;
+    font-size: 15px;
+  }
+  
+  :deep(.el-card__body) {
+    padding: 12px;
+  }
+  
+  :deep(.el-dialog) {
+    width: 95% !important;
+    margin: 2vh auto;
+  }
 }
 </style>

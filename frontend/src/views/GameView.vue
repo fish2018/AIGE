@@ -34,33 +34,31 @@
             <h2>{{ currentModInfo?.name }}</h2>
             <span class="mod-id">{{ currentGame }}</span>
           </div>
-          <div class="game-actions">
-            <!-- PC端按钮 -->
-            <div class="pc-actions">
-              <span class="opportunities">
-                剩余机缘: <strong>{{ sessionState?.opportunities_remaining ?? 10 }}</strong>
-              </span>
-              <button @click="saveGame" class="btn-save" :disabled="isSaving">
-                {{ isSaving ? '存档中...' : '💾 手动存档' }}
-              </button>
-              <button @click="showRestartConfirm" class="btn-restart" title="清空所有存档，重新开始">
-                🔄 重启机缘
-              </button>
-              <button @click="switchGame" class="btn-secondary">切换游戏</button>
-              <button @click="logout" class="btn-danger">退出</button>
-            </div>
-            <!-- 移动端菜单按钮 -->
-            <div class="mobile-actions">
-              <span class="opportunities mobile-opportunities-inline">
-                剩余机缘: <strong>{{ sessionState?.opportunities_remaining ?? 10 }}</strong>
-              </span>
-              <button @click="toggleStatusPanel" class="btn-status" :class="{ active: showStatusPanel }">
-                状态
-              </button>
-              <button @click="toggleMobileMenu" class="btn-menu">
-                ⚙️
-              </button>
-            </div>
+          <!-- PC端按钮 -->
+          <div class="pc-actions">
+            <span class="opportunities">
+              剩余机缘: <strong>{{ sessionState?.opportunities_remaining ?? 10 }}</strong>
+            </span>
+            <button @click="saveGame" class="btn-save" :disabled="isSaving">
+              {{ isSaving ? '存档中...' : '💾 手动存档' }}
+            </button>
+            <button @click="showRestartConfirm" class="btn-restart" title="清空所有存档，重新开始">
+              🔄 重启机缘
+            </button>
+            <button @click="switchGame" class="btn-secondary">切换游戏</button>
+            <button @click="logout" class="btn-danger">退出</button>
+          </div>
+          <!-- 移动端菜单按钮 -->
+          <div class="mobile-actions">
+            <span class="opportunities mobile-opportunities-inline">
+              剩余机缘: <strong>{{ sessionState?.opportunities_remaining ?? 10 }}</strong>
+            </span>
+            <button @click="toggleStatusPanel" class="btn-status" :class="{ active: showStatusPanel }">
+              状态
+            </button>
+            <button @click="toggleMobileMenu" class="btn-menu">
+              ⚙️
+            </button>
           </div>
         </div>
       </header>
@@ -112,6 +110,40 @@
               :class="['narrative-block', getBlockClass(text)]"
               v-html="renderMarkdown(text)"
             ></div>
+          </div>
+          
+          <!-- PC端输入区域 -->
+          <div class="pc-input-area">
+            <button 
+              v-if="!sessionState?.is_in_trial && !sessionState?.daily_success_achieved" 
+              @click="startTrial"
+              :disabled="!wsReady || isProcessing || isRolling || (sessionState?.opportunities_remaining ?? 0) <= 0"
+              class="btn-start"
+            >
+              {{ getStartButtonText() }}
+            </button>
+            
+            <div v-else-if="sessionState?.is_in_trial" class="action-input-row">
+              <input 
+                v-model="userInput"
+                type="text"
+                placeholder="汝欲何为..."
+                @keydown.enter="sendAction"
+                :disabled="isProcessing || isRolling"
+                class="action-input"
+              />
+              <button 
+                @click="sendAction"
+                :disabled="isProcessing || isRolling || !userInput.trim()"
+                class="btn-primary"
+              >
+                {{ isProcessing ? '处理中...' : isRolling ? '判定中...' : '行动' }}
+              </button>
+            </div>
+            
+            <div v-else-if="sessionState?.daily_success_achieved" class="success-message">
+              <p>🎉 今日功德圆满！明日再来。</p>
+            </div>
           </div>
         </main>
       </div>
@@ -1262,6 +1294,15 @@ onUnmounted(() => {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  min-height: 70px;
+  overflow: visible;
+}
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
 
 .game-title h2 {
@@ -1274,14 +1315,18 @@ onUnmounted(() => {
   opacity: 0.8;
 }
 
-.game-actions {
+.pc-actions {
   display: flex;
   gap: 1rem;
   align-items: center;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 
 .opportunities {
   font-size: 1rem;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .opportunities strong {
@@ -1574,6 +1619,102 @@ onUnmounted(() => {
   padding: 2rem;
   overflow-y: auto;
   scroll-behavior: smooth;
+}
+
+/* PC端输入区域 */
+.pc-input-area {
+  padding: 1rem 2rem;
+  background: #f8f9fa;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 80px;
+}
+
+.action-input-row {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  width: 100%;
+  max-width: 600px;
+}
+
+.action-input {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.3s ease;
+}
+
+.action-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.action-input:disabled {
+  background: #f5f5f5;
+  color: #999;
+}
+
+.btn-start {
+  padding: 1rem 2rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+}
+
+.btn-start:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-start:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-primary {
+  padding: 0.75rem 1.5rem;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #5a6fd8;
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.success-message {
+  text-align: center;
+  color: #28a745;
+  font-size: 1.1rem;
+  font-weight: 500;
 }
 
 .narrative-block {
@@ -1977,6 +2118,10 @@ onUnmounted(() => {
     display: flex;
   }
   
+  .pc-input-area {
+    display: flex;
+  }
+  
   /* PC端保持原有布局 */
   .game-header {
     flex-direction: row !important;
@@ -1996,6 +2141,10 @@ onUnmounted(() => {
   }
   
   .pc-status-panel {
+    display: none;
+  }
+  
+  .pc-input-area {
     display: none;
   }
   

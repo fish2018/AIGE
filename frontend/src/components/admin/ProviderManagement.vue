@@ -1254,6 +1254,12 @@ code {
   background: #fafbfc;
   border-radius: 6px;
   border: 1px solid #e4e7ed;
+  flex-wrap: wrap;
+}
+
+.default-model-selectors .el-select {
+  min-width: 120px;
+  flex: 1;
 }
 
 /* 游戏模型选择器样式 */
@@ -1283,5 +1289,139 @@ code {
   align-items: center;
   gap: 12px;
   flex: 1;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.model-selectors .el-select {
+  min-width: 0;
+  flex: 1;
+}
+
+/* 移动端适配 */
+@media (max-width: 1024px) {
+  .provider-management {
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+  }
+  
+  .default-model-selectors {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  
+  .default-model-selectors {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 16px;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e4e7ed;
+  }
+  
+  .default-model-selectors .el-select {
+    width: 100%;
+    flex: none;
+    min-width: auto;
+  }
+  
+  .default-model-selectors :deep(.el-select .el-input) {
+    width: 100%;
+  }
+  
+  .default-model-selectors :deep(.el-select .el-input__wrapper) {
+    width: 100%;
+    min-height: 32px;
+  }
+  
+  .default-model-selectors :deep(.el-select .el-input__inner) {
+    width: 100%;
+    height: auto;
+  }
+  
+  .game-model-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  
+  .game-info {
+    min-width: auto;
+    text-align: center;
+  }
+  
+  .model-selectors {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .model-selectors .el-select {
+    width: 100%;
+    flex: none;
+  }
+  
+  .model-selectors :deep(.el-select .el-input) {
+    width: 100%;
+  }
+  
+  .model-selectors :deep(.el-select .el-input__wrapper) {
+    width: 100%;
+    min-height: 32px;
+  }
+  
+  .provider-fields {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  
+  .page-header h3 {
+    text-align: center;
+  }
+  
+  .provider-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  
+  .provider-title {
+    justify-content: center;
+  }
+  
+  .provider-actions {
+    justify-content: center;
+  }
+  
+  .model-actions {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .models-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    text-align: center;
+  }
+  
+  .provider-types {
+    grid-template-columns: 1fr;
+  }
+  
+  .config-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    text-align: center;
+  }
 }
 </style>
