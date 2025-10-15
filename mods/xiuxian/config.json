@@ -22,8 +22,7 @@
   },
   "prompts": {
     "game_master": "prompts/game_master.txt",
-    "start_game": "prompts/start_game.txt",
-    "cheat_check": "prompts/cheat_check.txt"
+    "start_game": "prompts/start_game.txt"
   },
   "initial_state": {
     "opportunities_remaining": 10,
