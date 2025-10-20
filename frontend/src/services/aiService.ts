@@ -44,11 +44,10 @@ export class AIService {
     
     try {
       const token = localStorage.getItem('token')
-      const baseURL = import.meta.env.VITE_API_BASE_URL
       
-      //console.log('[AIService] 准备发送请求到:', `${baseURL}/api/admin/ai/chat`)
+      //console.log('[AIService] 准备发送请求到: /api/admin/ai/chat')
       
-      const response = await fetch(`${baseURL}/api/admin/ai/chat`, {
+      const response = await fetch('/api/admin/ai/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
