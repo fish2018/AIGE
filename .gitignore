@@ -4,4 +4,5 @@
 # 项目特定忽略
 mods/.DS_Store
 backend/chat.db
+backend/AIGE
 frontend/node_modules/

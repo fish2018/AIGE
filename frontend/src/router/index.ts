@@ -15,6 +15,12 @@ const router = createRouter({
       meta: { requiresAuth: false }
     },
     {
+      path: '/auth/callback/linux-do',
+      name: 'oauth-callback',
+      component: () => import('@/views/OAuthCallbackView.vue'),
+      meta: { requiresAuth: false }
+    },
+    {
       path: '/game',
       name: 'game',
       component: () => import('@/views/GameView.vue'),

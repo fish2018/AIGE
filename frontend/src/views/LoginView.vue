@@ -59,6 +59,19 @@
             {{ isLogin ? '没有账号？去注册' : '已有账号？去登录' }}
           </el-button>
         </el-form-item>
+
+        <el-divider>或</el-divider>
+
+        <el-form-item>
+          <el-button
+            @click="handleLinuxDoLogin"
+            style="width: 100%"
+            :loading="oauthLoading"
+          >
+            <span style="margin-right: 8px;">🐧</span>
+            使用 Linux.Do 账号登录
+          </el-button>
+        </el-form-item>
       </el-form>
     </el-card>
   </div>
@@ -76,6 +89,7 @@ const authStore = useAuthStore()
 
 const isLogin = ref(true)
 const loading = ref(false)
+const oauthLoading = ref(false)
 const formRef = ref<FormInstance>()
 
 const form = reactive({
@@ -161,6 +175,19 @@ const handleSubmit = async () => {
     console.error('提交失败:', error)
   } finally {
     loading.value = false
+  }
+}
+
+const handleLinuxDoLogin = async () => {
+  try {
+    oauthLoading.value = true
+    const authUrl = await authStore.loginWithLinuxDo()
+    window.location.href = authUrl
+  } catch (error: any) {
+    console.error('Linux.Do 登录失败:', error)
+    ElMessage.error('无法启动 Linux.Do 登录')
+  } finally {
+    oauthLoading.value = false
   }
 }
 </script>

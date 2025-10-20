@@ -112,6 +112,15 @@ export const useAdminStore = defineStore('admin', () => {
     return response
   }
 
+  const getOAuthConfig = async (): Promise<any> => {
+    const response = await api.get<any>('/admin/oauth/config')
+    return response
+  }
+
+  const saveOAuthConfig = async (config: any): Promise<void> => {
+    await api.post('/admin/oauth/config', config)
+  }
+
   return {
     getUsers,
     getUser,
@@ -134,5 +143,7 @@ export const useAdminStore = defineStore('admin', () => {
     toggleModel,
     testModel,
     updateModelCapabilities,
+    getOAuthConfig,
+    saveOAuthConfig,
   }
 })

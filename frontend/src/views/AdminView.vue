@@ -30,6 +30,11 @@
             <el-icon><ChatDotRound /></el-icon>
             <span>操练场</span>
           </el-menu-item>
+
+          <el-menu-item index="oauth">
+            <el-icon><Key /></el-icon>
+            <span>OAuth配置</span>
+          </el-menu-item>
           
           <el-menu-item index="system">
             <el-icon><Setting /></el-icon>
@@ -267,6 +272,91 @@
             <Playground />
           </div>
 
+          <!-- OAuth配置页面 -->
+          <div v-if="activeMenu === 'oauth'">
+            <el-card>
+              <template #header>
+                <div class="card-header">
+                  <span>Linux.Do OAuth 配置</span>
+                  <el-button type="primary" @click="saveOAuthConfig" :loading="oauthSaving">
+                    <el-icon><Check /></el-icon>
+                    保存配置
+                  </el-button>
+                </div>
+              </template>
+
+              <el-form :model="oauthConfig" label-width="150px" class="oauth-form">
+                <el-form-item label="启用状态">
+                  <el-switch v-model="oauthConfig.enabled" />
+                  <span style="margin-left: 10px; color: #909399;">
+                    {{ oauthConfig.enabled ? '已启用' : '已禁用' }}
+                  </span>
+                </el-form-item>
+
+                <el-divider />
+
+                <el-form-item label="Client ID" required>
+                  <el-input 
+                    v-model="oauthConfig.client_id" 
+                    placeholder="请输入 Linux.Do OAuth Client ID"
+                  />
+                </el-form-item>
+
+                <el-form-item label="Client Secret" required>
+                  <el-input 
+                    v-model="oauthConfig.client_secret" 
+                    placeholder="请输入 Linux.Do OAuth Client Secret"
+                  />
+                </el-form-item>
+
+                <el-form-item label="Redirect URL">
+                  <el-input 
+                    v-model="oauthConfig.redirect_url" 
+                    placeholder="http://localhost:3000/auth/callback/linux-do"
+                  />
+                  <div style="color: #909399; font-size: 12px; margin-top: 5px;">
+                    需要在 Linux.Do OAuth 应用中配置此回调地址
+                  </div>
+                </el-form-item>
+
+                <el-divider>高级配置</el-divider>
+
+                <el-form-item label="Authorization URL">
+                  <el-input 
+                    v-model="oauthConfig.auth_url" 
+                    placeholder="https://connect.linux.do/oauth2/authorize"
+                  />
+                </el-form-item>
+
+                <el-form-item label="Token URL">
+                  <el-input 
+                    v-model="oauthConfig.token_url" 
+                    placeholder="https://connect.linux.do/oauth2/token"
+                  />
+                </el-form-item>
+
+                <el-form-item label="User Info URL">
+                  <el-input 
+                    v-model="oauthConfig.user_info_url" 
+                    placeholder="https://connect.linux.do/api/user"
+                  />
+                </el-form-item>
+
+                <el-alert 
+                  title="配置说明" 
+                  type="info" 
+                  :closable="false"
+                  style="margin-top: 20px;"
+                >
+                  <p>1. 前往 Linux.Do 开发者中心创建 OAuth 应用</p>
+                  <p>2. 获取 Client ID 和 Client Secret</p>
+                  <p>3. 配置回调地址为上方的 Redirect URL</p>
+                  <p>4. 启用 OAuth 功能后，用户即可使用 Linux.Do 账号登录</p>
+                </el-alert>
+              </el-form>
+            </el-card>
+          </div>
+
           <!-- 系统设置页面 -->
           <div v-if="activeMenu === 'system'">
             <el-card>
@@ -333,6 +423,11 @@
           <el-menu-item index="playground">
             <el-icon><ChatDotRound /></el-icon>
             <span>操练场</span>
+          </el-menu-item>
+
+          <el-menu-item index="oauth">
+            <el-icon><Key /></el-icon>
+            <span>OAuth配置</span>
           </el-menu-item>
           
           <el-menu-item index="system">
@@ -406,7 +501,8 @@ import {
   Connection,
   Menu,
   Key,
-  Delete
+  Delete,
+  Check
 } from '@element-plus/icons-vue'
 import ProviderManagement from '@/components/admin/ProviderManagement.vue'
 import Playground from '@/components/admin/Playground.vue'
@@ -422,6 +518,7 @@ const passwordLoading = ref(false)
 const selectedUser = ref<User | null>(null)
 const passwordFormRef = ref<FormInstance>()
 const activeMenu = ref('overview')
+const oauthSaving = ref(false)
 
 // 移动端状态
 const mobileMenuVisible = ref(false)
@@ -468,12 +565,15 @@ onMounted(() => {
     return
   }
   loadUsers()
+  loadOAuthConfig()
 })
 
 const handleMenuSelect = (index: string) => {
   activeMenu.value = index
   if (index === 'users') {
     loadUsers()
+  } else if (index === 'oauth') {
+    loadOAuthConfig()
   }
 }
 
@@ -484,9 +584,42 @@ const toggleMobileMenu = () => {
 
 const handleMobileMenuSelect = (index: string) => {
   activeMenu.value = index
-  mobileMenuVisible.value = false // 选择后关闭菜单
+  mobileMenuVisible.value = false
   if (index === 'users') {
     loadUsers()
+  } else if (index === 'oauth') {
+    loadOAuthConfig()
+  }
+}
+
+const oauthConfig = reactive({
+  client_id: '',
+  client_secret: '',
+  redirect_url: `${window.location.origin}/auth/callback/linux-do`,
+  auth_url: 'https://connect.linux.do/oauth2/authorize',
+  token_url: 'https://connect.linux.do/oauth2/token',
+  user_info_url: 'https://connect.linux.do/api/user',
+  enabled: false
+})
+
+const loadOAuthConfig = async () => {
+  try {
+    const data = await adminStore.getOAuthConfig()
+    Object.assign(oauthConfig, data)
+  } catch (error) {
+    console.error('加载 OAuth 配置失败:', error)
+  }
+}
+
+const saveOAuthConfig = async () => {
+  try {
+    oauthSaving.value = true
+    await adminStore.saveOAuthConfig(oauthConfig)
+    ElMessage.success('OAuth 配置保存成功')
+  } catch (error) {
+    console.error('保存 OAuth 配置失败:', error)
+  } finally {
+    oauthSaving.value = false
   }
 }
 
@@ -496,6 +629,7 @@ const getCurrentPageTitle = () => {
     users: '用户管理',
     providers: '提供商管理',
     playground: '操练场',
+    oauth: 'OAuth配置',
     system: '系统设置'
   }
   return titles[activeMenu.value] || '概览'

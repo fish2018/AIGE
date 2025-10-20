@@ -55,6 +55,21 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value?.is_admin || false
   }
 
+  const loginWithLinuxDo = async (): Promise<string> => {
+    const data = await api.get<{ auth_url: string }>('/auth/oauth/linux-do')
+    return data.auth_url
+  }
+
+  const handleLinuxDoCallback = async (code: string, state: string): Promise<AuthResponse> => {
+    const data = await api.get<AuthResponse>(`/auth/oauth/linux-do/callback?code=${code}&state=${state}`)
+    
+    user.value = data.user
+    token.value = data.token
+    localStorage.setItem('token', data.token)
+    
+    return data
+  }
+
   return {
     user,
     token,
@@ -64,5 +79,7 @@ export const useAuthStore = defineStore('auth', () => {
     getProfile,
     isAuthenticated,
     isAdmin,
+    loginWithLinuxDo,
+    handleLinuxDoCallback,
   }
 })

@@ -13,6 +13,9 @@ func SetupRoutes(r *gin.Engine) {
 	{
 		auth.POST("/register", controllers.Register)
 		auth.POST("/login", controllers.Login)
+		
+		auth.GET("/oauth/linux-do", controllers.LinuxDoLogin)
+		auth.GET("/oauth/linux-do/callback", controllers.LinuxDoCallback)
 	}
 
 	// 需要认证的路由
@@ -73,5 +76,9 @@ func SetupRoutes(r *gin.Engine) {
 		admin.POST("/game/reload-config", controllers.ReloadGameConfig)
 		admin.GET("/game/model-config", controllers.GetGameModelConfig)
 		admin.POST("/game/model-config", controllers.SaveGameModelConfig)
+
+		// OAuth 配置管理
+		admin.GET("/oauth/config", controllers.GetOAuthConfig)
+		admin.POST("/oauth/config", controllers.SaveOAuthConfig)
 	}
 }
