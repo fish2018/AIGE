@@ -168,11 +168,11 @@
             <div class="field-item">
               <label class="field-label">API密钥</label>
               <el-input
-                v-model="provider.api_key"
+                :model-value="provider.api_key"
                 type="password"
                 show-password
                 placeholder="输入API密钥"
-                @input="handleUpdateProvider(provider)"
+                @update:model-value="(val: string) => updateProviderField(provider, 'api_key', val)"
               />
             </div>
             <div class="field-item">
@@ -181,10 +181,10 @@
                 <span v-if="provider.type !== 'custom'" style="font-size: 12px; color: #909399;">(可选)</span>
               </label>
               <el-input
-                v-model="provider.base_url"
+                :model-value="provider.base_url"
                 type="url"
                 :placeholder="getDefaultBaseUrl(provider.type)"
-                @input="handleUpdateProvider(provider)"
+                @update:model-value="(val: string) => updateProviderField(provider, 'base_url', val)"
               />
             </div>
           </div>
@@ -593,12 +593,19 @@ const handleToggleProvider = async (provider: Provider) => {
   }
 }
 
-const handleUpdateProvider = async (provider: Provider) => {
+const updateProviderField = async (provider: Provider, field: 'api_key' | 'base_url', value: string) => {
+  const updatedData = {
+    api_key: field === 'api_key' ? value : provider.api_key,
+    base_url: field === 'base_url' ? value : provider.base_url
+  }
+  
   try {
-    await adminStore.updateProvider(provider.id, {
-      api_key: provider.api_key,
-      base_url: provider.base_url
-    })
+    await adminStore.updateProvider(provider.id, updatedData)
+    if (field === 'api_key') {
+      provider.api_key = value
+    } else {
+      provider.base_url = value
+    }
   } catch (error: any) {
     ElMessage.error(error.message || '更新失败')
   }
